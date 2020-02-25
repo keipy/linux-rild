@@ -1,0 +1,140 @@
+/****************************************************************************
+  common.h
+  Author : kpkang@gmail.com
+*****************************************************************************/
+#ifndef __RESERVED_API_H
+#define __RESERVED_API_H
+
+#include "ril.h"
+
+/* Agent Window messages */
+#define WM_USER                (1024)
+#define WM_USER_MSG_PROC	     (WM_USER+250)
+
+#define SHARED_MEMORY_KEY      1234
+#define MSG2SERVER_QUE_KEY     4499
+#define MSG2CLIENT_QUE_KEY     4498
+#define MSG2TCPSND_QUE_KEY     4497
+
+#define MAX_NETNAME_LENGTH     20
+#define MAX_VERSION_LENGTH     40
+#define MAX_NUMBER_LENGTH      20
+#define MAX_MESSAGE_LENGTH     160
+#define MAX_SERIAL_LENGTH      20
+#define MAX_ICCID_LENGTH       24
+
+#define MSGQUEUE_NAME       L"Message Queue"
+#define MAX_MSG_QUEUE 20
+
+#define DEFAULT_MODEM_VOLUME  2
+#define DEFAULT_MODEM_MICGAIN 6
+
+#define UPDATE_PHONENUMBER  0x1
+#define UPDATE_SERIALNUMBER 0x2
+#define UPDATE_MODEMVERSION 0x4
+#define UPDATE_NETWORKNAME  0x8
+
+#define RSSI_INIT_VALUE    (-128)
+#define ECIO_INIT_VALUE    (-31)
+
+
+#ifndef _WIN_TYPE_
+#define _WIN_TYPE_
+typedef int           HANDLE;
+typedef int           HWND;
+typedef unsigned char BOOL;
+typedef unsigned char BYTE;
+typedef unsigned int  UINT;
+typedef unsigned int  DWORD;
+typedef double        DOUBLE;
+typedef char          CHAR;
+typedef unsigned char byte;
+typedef unsigned short WORD;
+#endif // _WIN_TYPE_
+
+#ifndef FALSE
+#define FALSE 0
+#endif
+#ifndef TRUE
+#define TRUE 1
+#endif
+
+enum
+{
+  CALL_DIAL = 1,
+  CALL_ANSWER,
+  CALL_HANGUP,
+  CALL_VOLUME,
+  CALL_MIC,
+  CALL_DTMF,
+
+  TCP_OPEN = 20,
+  TCP_SEND,
+  TCP_CLOSE,
+  TCP_STATUS,
+
+  SMS_SEND = 40,
+  DATA_CONNECT,
+  DATA_DISCONNECT,
+  GPS_START,
+  GPS_STOP,
+  
+  SYS_CONTROL = 60,
+  PROC_ATTACH,
+  PROC_DETACH,
+  PROC_UPDATE,
+};
+
+
+enum
+{
+  NET_UNKNOWN = 0,
+  NET_WCDMA = 3,
+  NET_LTE,
+};
+
+typedef struct {
+  long caller;   /* message type, must be > 0 */
+  int  msgID;
+  int  wparm;
+  int  lparm;
+  union {
+    char data[4]; 
+    int  lparm;
+  } u;
+}Msg2Agent;
+
+typedef struct
+{
+  char strNetworkName[MAX_NETNAME_LENGTH + 4];        // ATI4
+  char strModemVersion[MAX_VERSION_LENGTH + 4];     // AT+GMR
+  char strPhoneNumber[MAX_NUMBER_LENGTH + 4];      // AT+CNUM
+  char strSerialNumber[MAX_SERIAL_LENGTH + 4];     // AT#MSN
+}ModemInfo;
+
+
+typedef struct{
+
+  int          agentPID;
+  int          agentQue;  // for client -> server
+  int          tcpipQue;
+  ModemInfo    modemInfo;
+  char         strICCID[MAX_ICCID_LENGTH];
+  char         strAgentVer[MAX_VERSION_LENGTH];
+  int          nRSSI;
+  int          nRSRQ;
+  int          nRSRP;
+  int          nRadioTech;
+  int          nRegistration;
+  int          eRASState ;
+  int          eATDState ;
+  int          eSIMState ;
+  int          eSMSState ;
+  int          eGPSState ;
+  IPAddrT      modemIP;
+  int          nRejectCode;
+  int          nModemVolume;
+  int          nModemMicGain;
+} SharedData;
+
+#endif
