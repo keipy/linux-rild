@@ -282,7 +282,7 @@ int main(int argc, char *argv[])
       }
       else if ('d' == ch)
       {
-        Dial("01024313631");
+        Dial("01224314391");
       }
       else if ('h' == ch)
       {
@@ -291,7 +291,7 @@ int main(int argc, char *argv[])
 
       else if ('m' == ch)
       {
-        SendSMS("01024313631", "Linux RIL Test", MESSAGE_TYPE_ASCII);
+        SendSMS("01224314391", "Linux RIL Test", MESSAGE_TYPE_ASCII);
       }
       else if ('r' == ch)
       {
