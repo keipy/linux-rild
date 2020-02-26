@@ -32,11 +32,11 @@ unsigned char sendData[1024];
 void TcpConnect(){
   IPAddrT addr;
 #if 1  
-  WORD  port = 8801;
-  addr.digit1 = 115;
+  WORD  port = 8888;
+  addr.digit1 = 225;
   addr.digit2 = 90;
   addr.digit3 = 109;
-  addr.digit4 = 11;
+  addr.digit4 = 31;
 #else  
 //210.181.29.11
   WORD  port = 9206; // 9215
