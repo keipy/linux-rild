@@ -1,5 +1,5 @@
 # linux-rild
-Ril Daemon for cellular module
+Ril Daemon for cellular module (Quectel EC21E & EC25E)
 
 # 1. Build ril daemon 
 ```
