@@ -27,6 +27,16 @@ int response_version(char * pResponse)
   return 0;                
 }
 
+int response_model(char * pResponse)
+{
+  // EC21
+  // BG96
+  // BG95-M6
+
+
+  return 0;                
+}
+
 
 int response_cnum(char * pResponse)
 {
@@ -261,53 +271,37 @@ int response_cpin(char * pResponse)
 }
 int response_cgreg(char * pResponse)
 {
- return 0;
+	 return 0;
 }
 int response_cgdcont(char * pResponse)
 {
   //+CGDCONT: 1,"IPV4V6","","0.0.0.0",0,0
   //01234567890
   {
-    int i, cid = 0;
-    int null_apn = 0;
+    int cid = -1;
     char apn[128] = {0,};
-    char *pToken;
+		char parm[16] ;
 
-    pToken = strchr_nth(&pResponse[10],',', 2);
-    if (pToken) {
-      char *pTemp = strchr_nth(pToken+1,',', 1);
+    if (GET_NTH_PARAM(pResponse, 1, parm ) > 0) 
+		{
+      cid = atoi(parm);
 
-      if (pTemp && ((unsigned int)pTemp - (unsigned int)pToken) < 4){
-        null_apn = 1;
-        DEBUG(MSG_HIGH,"[%s] null_apn\n", __func__ );
-      }
+      if (GET_NTH_PARAM(pResponse, 3, apn ) >= 0)
+    	{
+	    	remove_quote(apn);
+				if (strlen(apn) == 0) {
+					DEBUG(MSG_HIGH,"[%s] null_apn\n", __func__ );
+				}
+    	}
     }
 
-    pToken = strtok(&pResponse[10], strDelimit);
-    for (i = 0; NULL != pToken; i++)
+		if (cid > 0) m_nCidLists |= (0x1 << (cid -1));
+
+    if (cid == 1)
     {
-        if (0 == i){
-          cid = atoi(pToken);
-          if (cid != 1) break;
-        }
-        else if (2 == i){  // apn
-          if (!null_apn) {
-            strncpy(apn, pToken, sizeof(apn)-1);
-          }
-          break;
-        }
-
-        pToken = strtok(NULL, strDelimit);
-    }
-
-    m_nCidLists |= (0x1 << (cid -1));
-    
-
-    if (cid == 1 || cid == 2)
-    {
-      if (strcmp(SKT_DEFAULT_APN, apn) )
+      if (strcmp(APN_NAME, apn))  
       {
-        SendCommand(AT_CGDCONT_1+(cid-1), FALSE, NULL);
+				SendCommand(AT_CGDCONT_X, FALSE, "AT+CGDCONT=%u,\"IPV4V6\",\"%s\"\r", cid, APN_NAME);
       }
     }
   }
@@ -329,7 +323,7 @@ int response_qcota(char * pResponse)
   if (pToken)
   {
     int otaState;
-    otaState = xtoi(&pToken[0]);
+    otaState = atoi(&pToken[0]);
     if (otaState != 1)
     {
       SendCommand(AT_QCOTA_1, FALSE, NULL);
@@ -355,7 +349,6 @@ int response_cgpaddr(char * pResponse)
 
   //+CGPADDR: 1,"10.207.137.130"
   //0123456789012
-  //if (pResponse[10] == '1')
   if (pResponse[10] == '1' )
   {
     IPAddrT mdmIPAddr;
@@ -383,15 +376,12 @@ int response_cgpaddr(char * pResponse)
 }
 int response_band(char * pResponse)
 {
-  //int  nIndex;
   char *pToken = NULL;
 
   //+QCFG: "band",0x10,0x40000015,0x0
   //01234567
-  //+QCFG: "band",0x10,0x40000014,0x0 // band1 \C1\A6\B0\C5
-  int i, wBand, lBand;
-  //int savedBand;
-  int tdBand;
+  //+QCFG: "band",0x10,0x40000014,0x0 
+  int i, wBand, lBand, tdBand;
   
   pToken = strtok(&pResponse[7], strDelimit);
   for (i = 0, wBand = 0, lBand = 0; NULL != pToken; i++)
@@ -408,6 +398,7 @@ int response_band(char * pResponse)
         if ('x' == pToken[1])
           lBand = xtoi(&pToken[2]);
       }
+			
       else if (3 == i){
         if ('x' == pToken[1])
           tdBand = xtoi(&pToken[2]);
@@ -415,17 +406,18 @@ int response_band(char * pResponse)
 
       pToken = strtok(NULL, strDelimit);
   }
-#if 0
-  DEBUG(MSG_HIGH, "BAND wBand : 0x%08x, lBand : 0x%08x \r\n", wBand, lBand);
-  DEBUG(MSG_HIGH, "BAND gBand3gArg : 0x%08x gBandlteArg : 0x%llx \r\n", gBand3gArg, gBandlteArg);
-  if (gBand3gArg != 0 || gBandlteArg != 0)
+
+
+  DEBUG(MSG_HIGH, "BAND wBand : 0x%08x, lBand : 0x%08x tdBand : 0x%08x\r\n", wBand, lBand, tdBand);
+
+  if (strstr(GetModemVersion(), "EC21KL"))
   {
-    if (wBand != gBand3gArg || lBand != gBandlteArg)
+    if ( lBand != 0x55)
     {
-      SendCommand(AT_QCFG_BAND_XX, FALSE);
+		  SendCommand(AT_QCFG_BAND_XX, FALSE, "AT+QCFG=\"band\",0,55,0\r");
     }
   }
-#endif                  
+             
   return 0;
 }
 int response_pdp_duplicate(char * pResponse)
@@ -472,20 +464,20 @@ int response_nwscanmode(char * pResponse)
       pToken = strtok(NULL, strDelimit);
   }
 
-  //if (m_nModelID == EC21KL)
+	if (strstr(GetModemVersion(), "EC21KL") || strstr(GetModemVersion(), "BG9"))
   {
     if (nwScanMode != 3 )
     {
       SendCommand(AT_QCFG_NW_LTE, FALSE, NULL);
     }
   }
-  //else
-  //{
-  //  if (nwScanMode != 0 )
-  //  {
-  //    SendCommand(AT_QCFG_NW_AUTO, FALSE, NULL);
-  //  }
-  //}
+  else
+  {
+    if (nwScanMode != 0 )
+    {
+      SendCommand(AT_QCFG_NW_AUTO, FALSE, NULL);
+    }
+  }
   return 0;
 }
 
@@ -530,7 +522,10 @@ int response_urcport(char * pResponse)
     }
   } else {
     if (!strstr(&pResponse[20], "usbat")){
-      SendCommand(AT_QURCCFG_USB, FALSE, NULL);
+			if (strstr(GetModemVersion(), "EC21KL") )
+				SendCommand(AT_QURCCFG_ALL, FALSE, NULL);
+			else
+      	SendCommand(AT_QURCCFG_USB, FALSE, NULL);
     }
   }
   /*
@@ -687,8 +682,8 @@ int response_sim_presence(char *pResponse)
 int response_clvl(char *pResponse)
 {
   //+CLVL: 2
-  char *token = strchr_nth_next(pResponse, ' ', 1);
-  if(NULL != token)
+  char token[8];
+  if (GET_NTH_PARAM(pResponse, 1, token) > 0)
   {
     int nVol = atoi(token);
     SetModemVolume(nVol);
@@ -701,8 +696,8 @@ int response_clvl(char *pResponse)
 int response_cmvl(char *pResponse)
 {
   //+CMVL: 3
-  char *token = strchr_nth_next(pResponse, ' ', 1);
-  if(NULL != token)
+  char token[8];
+  if (GET_NTH_PARAM(pResponse, 1, token) > 0)
   {
     int nVol = atoi(token);
     SetMicGain(nVol);
@@ -714,19 +709,15 @@ int response_cmvl(char *pResponse)
 int response_cops(char *pResponse)
 {
   //+COPS: 0,0,"SKTelecom",7
-  int len;
-  char *pToken = strchr_nth_next(pResponse, ',', 2);
+  char net_name[MAX_NETNAME_LENGTH];
 
-  if (!pToken) return 0;
+
+	if (GET_NTH_PARAM(pResponse, 3, net_name) > 0)
+	{
+		SetModemInfo(net_name, UPDATE_NETWORKNAME);
+	}
+	
    
-  pToken = strtok(pToken, strDelimit);
-
-  if (pToken && strlen(pToken) < MAX_NETNAME_LENGTH)
-  {
-    SetModemInfo(pToken, UPDATE_NETWORKNAME);
-  }
-
-    
   return 0;
 }
 

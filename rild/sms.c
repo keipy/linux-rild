@@ -11,6 +11,10 @@
 #include "m2mdbg.h"
 #include "utils.h"
 
+#define CHAR_SET_GSM_7BIT 0
+#define CHAR_SET_UCS2 0x8
+#define CHAR_SET_KSC5601 0x84
+
 
 const unsigned char alphabet_table[] = 
 {
@@ -53,7 +57,7 @@ const unsigned char extension_table[][2] =
 {
   { /*0x1B*/0x0A, 0x0C },  //      FORM FEED
  #if 0 
-  { /*0x1B*/0x65, 0x20 },  // €     EURO SIGN
+  { /*0x1B*/0x65, 0x20 },  // ??    EURO SIGN
 #endif
   { /*0x1B*/0x3C, 0x5B },  // [    LEFT SQUARE BRACKET
   { /*0x1B*/0x2F, 0x5C },  // \    REVERSE SOLIDUS (BACKSLASH)
@@ -208,26 +212,22 @@ int decode_alphabet(char *user_data, int user_data_length, char* message)
 
 int EncodePDU(/*IN*/char *inSMSTxt, /*IN*/int inType, /*IN*/char *inMtNumber, /*IN*/char *inMoNumber, /*OUT*/char *outSMSPDU)
 {
-  char strDstNumberBCD[MAX_NUMBER_LENGTH];
-  char strOrgNumberBCD[MAX_NUMBER_LENGTH];
-
   char user_data_pdu[MAX_MESSAGE_LENGTH*2+4] = { '\0', };
   char user_data_raw[MAX_MESSAGE_LENGTH+2] = { '\0', };
   int  user_data_length = 0;
 
   char user_data_header_pdu[128] = { '\0', };
   int  i, msg_len = 0;
+  char reply_bcd[MAX_NUMBER_LENGTH] = { 0, };
+  char da_bcd[MAX_NUMBER_LENGTH]     = { 0, };
+  int type_of_address = 0x80 | NPI_ISDN_telephone; /* 0x80 + TON(type of number) + NPI(Numbering-plan-identification)  */
+  int da_length = 0;
 
   int udhi = TP_MTI;
-  int dcs = 0;
+  int dcs = CHAR_SET_GSM_7BIT;
   int shift = 0;
   int udh_include = 0;
   WORD *user_data_ucs2 = NULL;
-
-
-  // make BCD
-  Hex2Bcd(inMtNumber,   strDstNumberBCD);
-  Hex2Bcd(inMoNumber,   strOrgNumberBCD);
 
   if(MESSAGE_TYPE_UCS2 == inType)
   {
@@ -239,7 +239,7 @@ int EncodePDU(/*IN*/char *inSMSTxt, /*IN*/int inType, /*IN*/char *inMtNumber, /*
     }
 
     msg_len = i;
-    dcs = 0x8;
+    dcs = CHAR_SET_UCS2;
   }
   else
   {
@@ -250,29 +250,73 @@ int EncodePDU(/*IN*/char *inSMSTxt, /*IN*/int inType, /*IN*/char *inMtNumber, /*
 	    if(0x80 & inSMSTxt[i])
 	    {
 	      // KS5601
-	      dcs = 0x84;
+	      dcs = CHAR_SET_KSC5601;
 	      strcpy(user_data_raw, inSMSTxt);
 	      break;
 	    }
 	  }
 
-    if (0 == dcs){
+    if (CHAR_SET_GSM_7BIT == dcs){
       msg_len = encode_alphabet(inSMSTxt, user_data_raw);
     }
   }
 
 
+  // Destination Address
+  if (inMtNumber[0] == '+') {
+    type_of_address |= (TON_International << 4);
+
+    // make BCD
+    Hex2Bcd(inMtNumber+1,    da_bcd);
+    da_length = strlen(inMtNumber+1) ;
+  }else{
+    int unknown = 0;;
+    for (i = 0; i < strlen(inMtNumber); i++) {
+      if (inMtNumber[i] == '*') {
+        unknown = 1;
+        inMtNumber[i] = 'A';
+      }else if (inMtNumber[i] == '#') {
+        unknown = 1;
+        inMtNumber[i] = 'B';
+      }
+    }
+
+    if (unknown)
+      type_of_address |= (TON_Unknown << 4);
+    else
+      type_of_address |= (TON_National << 4);
+      
+    // make BCD
+    Hex2Bcd(inMtNumber,    da_bcd);
+    da_length = strlen(inMtNumber);
+  }
+
+
+
   if (udh_include)
   {
-    char udh_1[60];
-    char udh_2[60];
-    sprintf(udh_1, "%02XA1%s", (int)strlen(inMoNumber), strOrgNumberBCD);
+    char udh_1[32];
+    char udh_2[40];
+    char my_number[24]  = { 0, };
+
+		
+    // Replay Address
+    if (!strncmp(inMoNumber, "+82", 3)) {
+      my_number[0] = '0';
+      strncpy(my_number+1, inMoNumber+3, 19);
+    }else{
+      strncpy(my_number, inMoNumber, 20);
+    }
+		
+		Hex2Bcd(my_number, reply_bcd);
+		
+    sprintf(udh_1, "%02XA1%s", (int)strlen(inMoNumber), reply_bcd);
     sprintf(udh_2, "22%02X%s", (int)strlen(udh_1) / 2, udh_1);
     sprintf(user_data_header_pdu, "%02X%s", (int)strlen(udh_2) / 2, udh_2);
     udhi  = udhi | TP_UDHI;
   }
 
-  if (0 == dcs)
+  if(CHAR_SET_GSM_7BIT == dcs)
   {
     int pos = 0;
     unsigned char out[MAX_MESSAGE_LENGTH+2] = {0, };
@@ -333,12 +377,12 @@ int EncodePDU(/*IN*/char *inSMSTxt, /*IN*/int inType, /*IN*/char *inMtNumber, /*
       }
     }
 
-    for(i = 0; i < msg_len; i++)
+    for(i = 0; i < pos; i++)
     {
       sprintf(&user_data_pdu[i * 2], "%02X", out[i]);
     }
   }
-  else if (0x8 == dcs)  // ucs2
+  else if (CHAR_SET_UCS2 == dcs)  // ucs2
   {
     for(i = 0; i < msg_len; i++)
     {
@@ -346,7 +390,7 @@ int EncodePDU(/*IN*/char *inSMSTxt, /*IN*/int inType, /*IN*/char *inMtNumber, /*
     }
     user_data_length = msg_len*2;
   }
-  else  // ksc5601
+  else if (CHAR_SET_KSC5601 == dcs)  // ksc5601
   {
     for(i = 0; i < msg_len; i++)
     {
@@ -354,15 +398,20 @@ int EncodePDU(/*IN*/char *inSMSTxt, /*IN*/int inType, /*IN*/char *inMtNumber, /*
     }
     user_data_length = msg_len;
   }
+	else
+	{
+		return 0;
+	}
+
 
   if (udhi & TP_UDHI)
   {
-    msg_len = (int)sprintf(outSMSPDU, "00%02XFF%02XA1%s00%02X%02X%s%s", udhi, (int)strlen(inMtNumber), strDstNumberBCD, 
+    msg_len = (int)sprintf(outSMSPDU, "00%02XFF%02X%02X%s00%02X%02X%s%s", udhi, da_length, type_of_address, da_bcd, 
                                                           dcs, user_data_length, user_data_header_pdu, user_data_pdu);
   }
   else
   {
-    msg_len = (int)sprintf(outSMSPDU, "00%02XFF%02XA1%s00%02X%02X%s", udhi, (int)strlen(inMtNumber), strDstNumberBCD, 
+    msg_len = (int)sprintf(outSMSPDU, "00%02XFF%02X%02X%s00%02X%02X%s", udhi, da_length, type_of_address, da_bcd, 
                                                           dcs, user_data_length, user_data_pdu);
   }
 
@@ -376,7 +425,7 @@ int EncodePDU(/*IN*/char *inSMSTxt, /*IN*/int inType, /*IN*/char *inMtNumber, /*
  outSMSTxt: Decoded SMS message
 
 */
-int DecodePDU(/*IN*/char *inSMSPDU, /*OUT*/int *outType, /*OUT*/char *outNumber, /*OUT*/char *outSMSTxt) 
+int DecodePDU(/*IN*/char *inSMSPDU, /*OUT*/int *outType, /*OUT*/char *outNumber, /*OUT*/char *outSMSTxt, timestamp_t *outTimeStamp) 
 {
   char user_data_raw[MAX_MESSAGE_LENGTH+4];
 
@@ -457,6 +506,23 @@ int DecodePDU(/*IN*/char *inSMSPDU, /*OUT*/int *outType, /*OUT*/char *outNumber,
   
   // TP-SCTS
   // 21505251708263
+  // 02904132303463    => 14/09/2020 23:03:43
+  if (outTimeStamp)
+  {
+    char temp[4] = {0, };
+    Bcd2Hex(&inSMSPDU[pdu_index+0], temp, 1);
+    outTimeStamp->year = atoi(temp);
+    Bcd2Hex(&inSMSPDU[pdu_index+2], temp, 1);
+    outTimeStamp->month = atoi(temp);
+    Bcd2Hex(&inSMSPDU[pdu_index+4], temp, 1);
+    outTimeStamp->day = atoi(temp);
+    Bcd2Hex(&inSMSPDU[pdu_index+6], temp, 1);
+    outTimeStamp->hour = atoi(temp);
+    Bcd2Hex(&inSMSPDU[pdu_index+8], temp, 1);
+    outTimeStamp->min = atoi(temp);
+    Bcd2Hex(&inSMSPDU[pdu_index+10], temp, 1);
+    outTimeStamp->sec = atoi(temp);
+  }
   pdu_index += 14;
 
   // TP-UDL
@@ -527,7 +593,7 @@ int DecodePDU(/*IN*/char *inSMSPDU, /*OUT*/int *outType, /*OUT*/char *outNumber,
     while(user_data_header_length != udhl);
   }
 
-  if (0x00 == dcs)
+  if (CHAR_SET_GSM_7BIT == dcs)
   {
     int pos = 0;
     char user_data_pdu[MAX_MESSAGE_LENGTH*2+4];
@@ -594,7 +660,7 @@ int DecodePDU(/*IN*/char *inSMSPDU, /*OUT*/int *outType, /*OUT*/char *outNumber,
 
     user_data_length = decode_alphabet(user_data_raw, user_data_length, user_data_raw);
   }
-  else if (0x08 == dcs)
+  else if (CHAR_SET_UCS2 == dcs)
   {
     char *user_data_pdu = &inSMSPDU[pdu_index];
 
@@ -606,7 +672,7 @@ int DecodePDU(/*IN*/char *inSMSPDU, /*OUT*/int *outType, /*OUT*/char *outNumber,
       user_data_length +=2;
     }
   }
-  else if (0x84 == dcs)
+  else if (CHAR_SET_KSC5601 == dcs)
   {
     char *user_data_pdu = &inSMSPDU[pdu_index];
 
@@ -617,7 +683,7 @@ int DecodePDU(/*IN*/char *inSMSPDU, /*OUT*/int *outType, /*OUT*/char *outNumber,
       user_data_length++;
     }
   }
-  else
+  else  // 8bit coding
   {
     char *user_data_pdu = &inSMSPDU[pdu_index];
 
@@ -626,7 +692,7 @@ int DecodePDU(/*IN*/char *inSMSPDU, /*OUT*/int *outType, /*OUT*/char *outNumber,
     {
       user_data_raw[i / 2] = Hex2Dec(&user_data_pdu[i]);
       user_data_length++;
-      if (user_data_raw[i / 2] > 0x80) dcs = 0x84;
+      if (user_data_raw[i / 2] > 0x80) dcs = CHAR_SET_KSC5601;
     }
   }
 
@@ -653,7 +719,7 @@ int DecodePDU(/*IN*/char *inSMSPDU, /*OUT*/int *outType, /*OUT*/char *outNumber,
   }
   
   if (outSMSTxt) {
-    if (dcs == 0x84 ){
+    if (dcs == CHAR_SET_KSC5601 ){
       int charLen = GetCharLength((unsigned char*)user_data_raw, user_data_length);
       if ( KSC5601ToUCS2((unsigned char*)user_data_raw, (WORD*)outSMSTxt, charLen))
         user_data_length = charLen*2;
@@ -667,7 +733,7 @@ int DecodePDU(/*IN*/char *inSMSPDU, /*OUT*/int *outType, /*OUT*/char *outNumber,
   }
 
   if (outType) {
-    if (dcs == 0x84 || dcs == 0x8)
+    if (dcs == CHAR_SET_KSC5601 || dcs == CHAR_SET_UCS2)
       *outType = MESSAGE_TYPE_UCS2;
     else
       *outType = MESSAGE_TYPE_ASCII;

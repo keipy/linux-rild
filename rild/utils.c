@@ -16,7 +16,10 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/time.h>
-//#include <sys/ipc.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <ifaddrs.h>
 #include <sys/msg.h>
 #include <ctype.h>
 #include <time.h>
@@ -645,6 +648,79 @@ char *strrchr_nth_next(char *text, char ch, int nth)
   return NULL;
 }
 
+void str_uppercase(char *s)
+{
+  int i;
+	for (i = 0; s[i]!='\0'; i++) {
+		 if(s[i] >= 'a' && s[i] <= 'z') {
+				s[i] = s[i] - 32;
+		 }
+	}
+}
+
+
+// start from 1st
+int get_nth_parameter(char *text, int nth, char* parm, int parm_sz)
+{
+  int parm_len = 0;
+  char *p_tmp;
+
+	if (parm_sz > 0) parm_sz -=1;
+	else return -1;
+
+  if (nth == 0) return -1;
+
+  if (nth == 1)
+  {
+    p_tmp = strchr(text, ':');
+    if (p_tmp) {
+      p_tmp++;
+      if (*p_tmp == ' ') p_tmp++;
+    }
+    else return -1;
+  }
+  else{
+    p_tmp = strchr_nth(text, ',', nth-1);
+    if (p_tmp) {
+      p_tmp++;
+    }
+    else return -1;
+  }
+
+  while(1)
+  {
+    if(*p_tmp == ',' || *p_tmp == '\r'  || *p_tmp == '\n' || *p_tmp == 0)
+    {
+      break;
+    }
+
+    if (parm_sz > parm_len)
+	    parm[parm_len++] = *p_tmp;
+		else
+			break;
+    p_tmp++;
+  }
+
+  parm[parm_len] = 0;
+
+  return parm_len;
+}
+
+void remove_quote(char *text)
+{
+  int i, len = strlen(text);
+
+  if (len < 2 || *text != '"') return;
+
+  for (i = 0; i < len-2; i++)
+  {
+    text[i] = text[i+1];
+  }
+  text[i] = 0;
+}
+
+
+
 
 int pdu2text(char *pInPDU, char *pOutBuf)
 {
@@ -693,7 +769,7 @@ BOOL IsTTYAvailable(char *sDev)
 
 BOOL IsNETAvailable(void)
 {
-	if (access("/sys/class/net/usb0", F_OK) != 0) {
+	if (access("/sys/class/net/wwan0", F_OK) != 0) {
 		return FALSE;    
 	}
 	
@@ -825,6 +901,74 @@ int GetProcState(int nPID, char *sResult)
   return ret;
 }
 
+BOOL IsWANConnected(void)
+{
+  struct ifaddrs *ifaddr, *ifa;
+  int family, s, n;
+  char host[NI_MAXHOST];
+	char interface_name[16];
+	int interface_family;
+
+  if (argument_mask & NET_ETH_AUTO)
+	  strcpy(interface_name, "wwan0");
+	else
+	  strcpy(interface_name, "ppp0");
+
+  if (getifaddrs(&ifaddr) == -1)
+  {
+     DEBUG(MSG_ERROR, "getifaddrs return error!");
+     return FALSE;
+  }
+
+  /* Walk through linked list, maintaining head pointer so we can free list later */
+  for (ifa = ifaddr, n = 0; ifa != NULL; ifa = ifa->ifa_next, n++)
+  {
+      if (ifa->ifa_addr == NULL)
+         continue;
+
+      family = ifa->ifa_addr->sa_family;
+
+      /* Display interface name and family (including symbolic
+      * form of the latter for the common families)
+      */
+      DEBUG(MSG_ERROR, "%-8s %s (%d)",
+            ifa->ifa_name,
+            (family == AF_PACKET) ? "AF_PACKET" :
+            (family == AF_INET) ? "AF_INET" :
+            (family == AF_INET6) ? "AF_INET6" : "???",
+            family);
+
+      /* Find the "rmnet_data0" network adapter */
+      if (strncmp(ifa->ifa_name, interface_name, strlen(interface_name)) == 0)
+      {
+          s = getnameinfo(ifa->ifa_addr, 
+                        (family == AF_INET) ? sizeof(struct sockaddr_in) :
+                        sizeof(struct sockaddr_in6),
+                        host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+          if (s != 0)
+          {
+             DEBUG(MSG_ERROR,"getnameinfo() failed: %s", gai_strerror(s));
+          }
+          else
+          {
+            interface_family = family;
+            DEBUG(MSG_ERROR,"< Retrived IP, address:%s >", host);
+            break;
+          }
+      }
+      else
+      {
+        DEBUG(MSG_ERROR,"< Not find RMNET >"); 
+      }
+  }
+
+  if (AF_UNSPEC != interface_family){
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
 int GetIpAddress(IPAddrT *ip_addr)
 {
   #include <net/if.h>
@@ -842,7 +986,7 @@ int GetIpAddress(IPAddrT *ip_addr)
   }
   
   if (argument_mask & NET_ETH_AUTO)
-	  strcpy(ifr.ifr_name, "usb0");
+	  strcpy(ifr.ifr_name, "wwan0");
 	else
 	  strcpy(ifr.ifr_name, "ppp0");
 

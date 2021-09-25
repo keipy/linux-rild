@@ -22,7 +22,7 @@ APP		 := example
 all:	$(APP) $(INCLUDES)
 
 ${APP}:	$(OBJS)
-	$(CC) $(CFLAGS) -o $@ $(OBJS) -lril -L../libs
+	$(CC) $(CFLAGS) -o $@ $(OBJS) -lril -L../libs -lpthread
 #	cp $@ /shared/
 
 clean:

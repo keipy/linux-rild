@@ -65,12 +65,21 @@ char *strchr_nth(char *text, char ch, int nth);
 char *strchr_nth_next(char *text, char ch, int nth);
 char *strrchr_nth(char *text, char ch, int nth);
 char *strrchr_nth_next(char *text, char ch, int nth);
+void str_uppercase(char *s);
+int get_nth_parameter(char *text, int nth, char* parm, int parm_sz);
+void remove_quote(char *text);
+
+
+#define GET_NTH_PARAM(A,B,C) get_nth_parameter(A,B,C,sizeof(C))
+
 
 int pdu2text(char *pInPDU, char *pOutBuf);
 void msleep(int ms);
 BOOL IsTTYAvailable(char*);
 BOOL IsNETAvailable(void);
 BOOL IsPPPLinkUp(void);
+BOOL IsWANConnected(void);
+
 int GetProcID(char *strName);
 int CheckPPPd(void);
 int GetProcState(int nPID, char *sResult);

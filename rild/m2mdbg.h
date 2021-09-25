@@ -20,7 +20,6 @@
 #define AT_INTF_UART 0x1000
 #define AT_INTF_USB  0x2000
 
-
 #define MODEL_EC21KL 0x10000
 
 #include <syslog.h>

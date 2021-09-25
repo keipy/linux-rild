@@ -34,7 +34,7 @@ enum
     ATE0,
     ATA,
     AT_GMR,
-    AT_QGMR,
+    AT_GMM,
     AT_CPIN,
     AT_CNUM,
     AT_CMGD_0_4,
@@ -133,6 +133,7 @@ enum
 
     AT_QIDNSGIP,
     AT_QCFG_BAND_XX,
+    AT_CGDCONT_X
 };
 
 
@@ -231,6 +232,7 @@ extern int g_nTCPRecvLen;
 extern int g_pidOfTCPRecv;
 #endif
 
+extern char APN_NAME[];
 extern proc_root_t parent_proc;
 
 extern const   char strDelimit[];

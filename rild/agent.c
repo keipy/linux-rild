@@ -44,6 +44,7 @@
 //#define _IP_MISMATCH_CHECK_
 
 #define _PPPD_CHILD_
+#define _WVDIAL_USED_
 
 #define AT_COMMAND_SIZE    1460
 #define AT_RESPONSE_SIZE   (AT_COMMAND_SIZE+128)
@@ -72,7 +73,7 @@ const comm_info_t cmd_table[] =
   {"ATE0\r", NULL},
   {"ATA\r", NULL},
   {"AT+GMR\r",  response_version},
-  {"AT+QGMR\r", response_version},
+  {"AT+GMM\r", response_model},
   {"AT+CPIN?\r", response_cpin},
   {"AT+CNUM\r", response_cnum},
   {"AT+CMGD=0,4\r", NULL},
@@ -154,6 +155,8 @@ const comm_info_t cmd_table[] =
   {"AT+COPS?\r", response_cops},
 };
 
+char APN_NAME[100] = "lte-internet.sktelecom.com";
+
 DWORD argument_mask = MSG_ERROR;
 
 byte g_nCnumEmptyCnt  = 0;
@@ -188,10 +191,11 @@ proc_root_t parent_proc;
 static DWORD mainSysTick = 0;
 
 
-static  pthread_t m_hRasThread;
+static  pthread_t m_hWanThread;
 static  pthread_t m_hSerThread;
+#ifdef _THREAD_TICK_
 static  pthread_t m_hTmrThread;
-
+#endif
 static  byte m_nATCommandID;
 static  byte m_nATResultTimer = 0;
 static  byte m_nNoResultCount = 0;
@@ -332,7 +336,10 @@ int ParseArgs(int argc, char *argv[])
     }
     else if (!strcmp("-at", argv[i]))
     {
-      strncpy(CMD_PORT, argv[++i], sizeof(CMD_PORT)-1);
+      if (NULL != argv[i+1])
+    	{
+        strncpy(CMD_PORT, argv[++i], sizeof(CMD_PORT)-1);
+    	}
     }
     else if (!strcmp("-dbg", argv[i]))
     {
@@ -345,6 +352,22 @@ int ParseArgs(int argc, char *argv[])
     else if (!strcmp("-eth", argv[i]))
     {
       argument_mask |= NET_ETH_AUTO;
+    }
+		else if (!strcmp("-apn", argv[i]))
+    {
+      if (NULL != argv[i+1] && *argv[i+1] != '-')
+    	{
+    	  str_uppercase(argv[++i]);
+				
+    	  if (!strcmp(argv[i], "NULL"))
+  	  	{
+	  	  	memset(APN_NAME, 0x0, sizeof(APN_NAME));
+  	  	}
+				else
+				{
+		      strncpy(APN_NAME, argv[i], sizeof(APN_NAME)-1);
+				}
+    	}
     }
   }
 
@@ -361,6 +384,8 @@ int ParseArgs(int argc, char *argv[])
     DEBUG(MSG_ERROR, "dev: %s\n", CMD_PORT);
     ret = -1;
   }
+
+	DEBUG(MSG_ERROR, "ParseArgs AT port : %s\n", CMD_PORT);
 
   return ret;
 }
@@ -676,8 +701,10 @@ void InitModem(int simState)
     g_eSIMStatus = SIM_NOT_INSERTED;
     
     SendCommand(ATE0,       FALSE, NULL);
+#ifdef SUPPORT_USIM_PROVISIONING
     SendCommand(AT_QCOTA,   FALSE, NULL);
-    SendCommand(AT_QGMR,    FALSE, NULL);
+#endif
+    SendCommand(AT_GMR,    FALSE, NULL);
     SendCommand(AT_CGSN,    FALSE, NULL);
     SendCommand(AT_QURCCFG, FALSE, NULL);
 #ifdef SUPPORT_SIM_HOTSWAP
@@ -695,7 +722,7 @@ void InitModem(int simState)
     SendCommand(AT_QICFG_DATAFORMAT_0_1, FALSE, NULL);
 #endif
 #endif // SUPPORT_TCP_CMD
-    SendCommand(AT_QCFG_PDPDUP,FALSE, NULL);
+    //SendCommand(AT_QCFG_PDPDUP,FALSE, NULL);
     SendCommand(AT_CGREG_1,FALSE, NULL);
     SendCommand(AT_CMEE_1, FALSE, NULL);
     SendCommand(AT_CPIN,   FALSE, NULL);
@@ -704,6 +731,8 @@ void InitModem(int simState)
   {
     g_eSIMStatus = SIM_READY;
     SetUSIMState(SIM_READY); 
+
+		SendCommand(AT_CGDCONT, FALSE, NULL);
 
 #ifdef SUPPORT_VOICE_CALL
     SendCommand(AT_DSCI_1, FALSE, NULL);
@@ -720,6 +749,7 @@ void InitModem(int simState)
 #endif    
     SendCommand(AT_CCLK,     FALSE, NULL);
     SendCommand(AT_COPS,   FALSE, NULL);
+		SendCommand(AT_CGPADDR,  FALSE, NULL);
 
     //SendAlertMsg(0, ERR_MODEM_RECOVERY_OK);
   }
@@ -728,7 +758,6 @@ void InitModem(int simState)
 int InitConnMgr(void)
 {
   int i, ret = 0;
-  IPAddrT ipAddr;
   
 	m_nDataCallPID = fork();
 	if(m_nDataCallPID < 0) {
@@ -750,11 +779,9 @@ int InitConnMgr(void)
 		      break;
 		    }
   		  
-  		  if (GetIpAddress(&ipAddr) == 0) {
-    		  if (ipAddr.digit1 != 0) {
-    		    ret = 0;
-    		    break;
-    		  }
+  		  if (IsWANConnected() ) {
+  		    ret = 0;
+  		    break;
   		  }
   		}
   		
@@ -764,13 +791,13 @@ int InitConnMgr(void)
 	else 
 	{
 	  if (argument_mask & NET_PPP_AUTO) {
-  	  //if (!m_nAmModule){
+#ifdef _WVDIAL_USED_
+			execl("/usr/bin/wvdial", "wvdial", NULL);
+#else			
       execl("/usr/sbin/pppd", "pppd", "call", "hsdpa", NULL);
-  		//}else{
-    	//	execl("/usr/sbin/pppd", "pppd", "call", "amtel", NULL);
-  		//}
+#endif
 	  } else {
-  		execl("/root/app/connMgr", "connMgr", NULL);
+  		execl("/home/pi/quectel-CM/quectel-CM", "quectel-CM", NULL);
 		}
 	}
 
@@ -990,7 +1017,7 @@ void ParseCodes(char chByte)
                     int  msg_len = 0;
                   
                     fCMGR = FALSE;
-                    msg_len = DecodePDU(pResponse, &msg_type, strCallerNumber, strRecvMessage);
+                    msg_len = DecodePDU(pResponse, &msg_type, strCallerNumber, strRecvMessage, NULL);
                     if (msg_len > 0)
                     {
                       DEBUG(MSG_HIGH, "MSG type %d, Len %d, Num Len %d \r\n", msg_type, msg_len, strlen(strCallerNumber));
@@ -1027,7 +1054,7 @@ void ParseCodes(char chByte)
                     
                     fCMGL = FALSE;
                     
-                    msg_len = DecodePDU(pResponse, &msg_type, strCallerNumber, strRecvMessage);
+                    msg_len = DecodePDU(pResponse, &msg_type, strCallerNumber, strRecvMessage, NULL);
                     if (msg_len > 0)
                     {
                       DEBUG(MSG_HIGH, "MSG type %d, Len %d, Num Len %d \r\n", msg_type, msg_len, strlen(strCallerNumber));
@@ -1186,6 +1213,7 @@ void OnTimer(void)
           {
             SendCommand(AT_CCLK, FALSE, NULL);
             SendCommand(AT_COPS,   FALSE, NULL);
+						SendCommand(AT_CGPADDR,	 FALSE, NULL);
           }
         }
         m_nStatusTimer   = TIMER_MODEM_STATUS;
@@ -1393,7 +1421,6 @@ void OnHangUp(int pid)
     g_pidOfATD = pid;
     SendCommand(AT_CHUP, FALSE, NULL);
   }
-  
 }
 
 void OnSetVolume(BYTE vol)
@@ -1418,13 +1445,15 @@ void OnSendSMS(int pid, SmsMsgT *sms)
     return ;
   }
 
-  DEBUG(MSG_ERROR,"OnSendSMS pid %d, MSG: %s\r\n", pid, sms->strMessage); 
+  DEBUG(MSG_ERROR,"OnSendSMS pid %d, NUM: %s MSG: %s\r\n", pid, sms->strNumber, sms->strMessage); 
 
   pdu_length = EncodePDU(sms->strMessage, sms->nType, sms->strNumber, GetPhoneNumber(), pdu_data);
   if (0 == pdu_length) {
     SetSMSState(pid, SMS_Error);
     return ;
   }
+
+	DEBUG(MSG_ERROR,"OnSendSMS PDU(%d): %s\r\n", pdu_length, pdu_data); 
   
   SendCommand(AT_CMGS, FALSE, "AT+CMGS=%d\r", pdu_length);
   SendCommand(AT_CMGS_PDU, FALSE, "%s%c", pdu_data, chSendPDUEnd);
@@ -1706,9 +1735,9 @@ void OnRasResult(int eStat, int sStat)
 	    }
 	  }
 	  if (0 == (argument_mask & NET_INF_TASK)){
-  	  if (m_hRasThread) {
-    		pthread_join(m_hRasThread, NULL);
-    		m_hRasThread = 0;
+  	  if (m_hWanThread) {
+    		pthread_join(m_hWanThread, NULL);
+    		m_hWanThread = 0;
       }
     }
 	}
@@ -1749,12 +1778,12 @@ void RASConnect(int pid)
     return;
   }
 	
-	if (!m_hRasThread)
+	if (!m_hWanThread)
 	{
-		ret = pthread_create(&m_hRasThread, NULL, (void *)RasThread, NULL);
+		ret = pthread_create(&m_hWanThread, NULL, (void *)RasThread, NULL);
 		if(ret) {
 		  SetRASState(0, RAS_Error);
-			DEBUG(MSG_ERROR,"ConnThread create failed!\n");
+			DEBUG(MSG_ERROR,"RasThread create failed!\n");
 			return;
 		}
 	}
@@ -1783,16 +1812,19 @@ void RASDisconnect(int pid)
   int ret;
 
   SetRASState(0, RAS_Disconnecting);
-  
+#ifdef _WVDIAL_USED_
+	ret = system("ps -ef | grep wvdial | awk '{print $2}' | xargs kill -15");
+#else
 	ret = system("ps -ef | grep pppd | awk '{print $2}' | xargs kill -15");
+#endif
 	if(WEXITSTATUS(ret) != 0) {
 		DEBUG(MSG_ERROR,"cannot execute kill -15 pppd\n");
 	}else{
 		DEBUG(MSG_HIGH, "success kill -15 pppd\n");
   }
-	if(m_hRasThread) {
-		pthread_join(m_hRasThread, NULL);
-		m_hRasThread = 0;
+	if(m_hWanThread) {
+		pthread_join(m_hWanThread, NULL);
+		m_hWanThread = 0;
 	}
 
 	SetRASState(0, RAS_Idle);
@@ -1802,7 +1834,6 @@ void RASDisconnect(int pid)
 void *RasThread(void *lpParam)
 {
 	int ret, status = 0;
-	IPAddrT ipAddr;
 
 #ifdef _PPPD_CHILD_
 	m_nDataCallPID = fork();
@@ -1824,11 +1855,9 @@ void *RasThread(void *lpParam)
 	      break;
 	    }
 		  
-		  if (GetIpAddress(&ipAddr) == 0) {
-  		  if (ipAddr.digit1 != 0) {
-  		    ret = 0;
-  		    break;
-  		  }
+		  if (IsWANConnected()) {
+		    ret = 0;
+		    break;
 		  }
 		}
 
@@ -1846,15 +1875,20 @@ void *RasThread(void *lpParam)
 	}
 	else 
 	{
-	  //if (!m_nAmModule){
+	
+#ifdef _WVDIAL_USED_
+		execl("/usr/bin/wvdial", "wvdial", NULL);
+#else			
 		execl("/usr/sbin/pppd", "pppd", "call", "hsdpa", NULL);
-		//}else{
-		//execl("/usr/sbin/pppd", "pppd", "call", "amtel", NULL);
-		//}
+#endif
 	}
 
 #else
+#ifdef _WVDIAL_USED_
+	ret = system("wvdial");
+#else
 	ret = system("pppd call hsdpa");
+#endif
 	if(WEXITSTATUS(ret) != 0) {
 	  DEBUG(MSG_ERROR,"cannot execute pppd!!\n");
     ret = RAS_Error;
@@ -1872,14 +1906,14 @@ void *RasThread(void *lpParam)
 
 void InitDataIntf(void)
 {
-	if (!m_hRasThread)
+	if (!m_hWanThread)
 	{
 	  int ret;
 	
     if (argument_mask & NET_PPP_AUTO)	  
-		  ret = pthread_create(&m_hRasThread, NULL, (void *)ConnThread, NULL);
+		  ret = pthread_create(&m_hWanThread, NULL, (void *)ConnThread, NULL);
     else if (argument_mask & NET_ETH_AUTO)
-		  ret = pthread_create(&m_hRasThread, NULL, (void *)ConnThread, NULL);
+		  ret = pthread_create(&m_hWanThread, NULL, (void *)ConnThread, NULL);
     else
       return;
       
@@ -1887,7 +1921,7 @@ void InitDataIntf(void)
 		  SetRASState(0, RAS_Error);
 			DEBUG(MSG_ERROR,"RAS: pthread_create failed!\n");
 		} else {
-		  pthread_detach(m_hRasThread);
+		  pthread_detach(m_hWanThread);
 		  SetRASState(0, RAS_Connecting);
 		}
 	}
@@ -1901,17 +1935,32 @@ void DeinitDataIntf(void)
 
   if (argument_mask & NET_PPP_AUTO)
   {
+#ifdef _WVDIAL_USED_
+		ret = system("ps -ef | grep wvdial | awk '{print $2}' | xargs kill -15");
+#else
   	ret = system("ps -ef | grep pppd | awk '{print $2}' | xargs kill -15");
+#endif
   	if(WEXITSTATUS(ret) != 0) {
   		DEBUG(MSG_ERROR,"cannot execute kill -15 pppd\n");
   	}else{
   		DEBUG(MSG_HIGH, "success kill -15 pppd\n");
     }
 
-  	if(m_hRasThread) {
-  	  pthread_cancel(m_hRasThread);
-  		m_hRasThread = 0;
-  	}
+	}
+	else if (argument_mask & NET_ETH_AUTO)
+	{
+	  ret = system("ps -ef | grep quectel-CM | awk '{print $2}' | xargs kill -15");
+		
+		if(WEXITSTATUS(ret) != 0) {
+			DEBUG(MSG_ERROR,"cannot execute kill -15 quectel-CM\n");
+		}else{
+			DEBUG(MSG_HIGH, "success kill -15 quectel-CM\n");
+		}
+	}
+
+	if(m_hWanThread) {
+		pthread_cancel(m_hWanThread);
+		m_hWanThread = 0;
 	}
 
 	SetRASState(0, RAS_Idle);
@@ -1967,7 +2016,12 @@ void RasMainLoop(void)
           sleep(5);
         }
 #else 
+#ifdef _WVDIAL_USED_
+				ret = system("wvdial");
+#else
+
       	ret = system("pppd call hsdpa");
+#endif
       	if(WEXITSTATUS(ret) != 0) {
       	  DEBUG(MSG_ERROR,"cannot execute pppd!!\n");
           ret = RAS_Error;
@@ -2216,16 +2270,19 @@ BOOL IsServiceOkay(void)
   {
     return TRUE;
   }
+
+	DEBUG(MSG_LOW, "IsServiceOkay reg:%d sim:%d rsrp:%d\n", g_eRegistration, g_eSIMStatus, g_nRSRP );		
   return FALSE;
 }
 
 BOOL IsRegistered(void)
 {
+#if 0
   if (GetRadioTech() == NET_LTE)
   {
-    IPAddrT mdmIPAddr; 
-    GetMdmIPAddr(&mdmIPAddr);
-    if (mdmIPAddr.digit1 != 0 && mdmIPAddr.digit4 != 0)
+    IPAddrT ipAddr; 
+    GetMdmIPAddr(&ipAddr);
+    if (ipAddr.digit1 != 0 && ipAddr.digit4 != 0)
       return TRUE;
   }
   else
@@ -2235,6 +2292,9 @@ BOOL IsRegistered(void)
   }
 
   return FALSE;
+#else
+  return TRUE;
+#endif
 }
 
 

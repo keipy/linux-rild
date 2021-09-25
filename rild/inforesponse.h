@@ -6,6 +6,7 @@
 
 
 int response_version(char * pResponse);
+int response_model(char * pResponse);
 int response_cnum(char * pResponse);
 int response_cclk(char * pResponse);
 int response_qcds(char * pResponse);
