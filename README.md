@@ -21,10 +21,10 @@ $ make
 **A. Execute rild daemon**  
 ```
 $ cd rild
-$ sudo ./rild -dbg -at /dev/ttyUSB2 &
+$ sudo ./rild -dbg -at /dev/ttyUSB3 &
 ```
 **B. Execute example**  
 ```
 $ cd example
-$ ./example
+$ ./example -n 01012345678
 ```
