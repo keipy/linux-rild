@@ -49,16 +49,15 @@
 #define AT_COMMAND_SIZE    1460
 #define AT_RESPONSE_SIZE   (AT_COMMAND_SIZE+128)
 
+/* Agent Window messages */
 #define WM_USER_HANGUP     SIGHUP  /* 1  */
 #define WM_USER_TIMER      SIGALRM /* 14 */
-#define WM_USER_DESTROY    SIGTERM /* 15 */
+//#define WM_USER_DESTROY    SIGTERM /* 15 */
 #define WM_USER_STOP       SIGSTOP /* 19, CTRL+Z, fg, bg*/
 #define WM_USER_INT        SIGINT  /* 2,  CRTL+C */
 #define WM_USER_QUIT       SIGQUIT /* 3,  CTRL+\ */
 #define WM_USER_USER1      SIGUSR1 /* 10 */
 #define WM_USER_USER2      SIGUSR2 /* 12 */ 
-
-
 
 #define DEFAULT_KICK_TIMEOUT 16
 
@@ -72,20 +71,20 @@ const comm_info_t cmd_table[] =
   {"", NULL},
   {"ATE0\r", NULL},
   {"ATA\r", NULL},
-  {"AT+GMR\r",  response_version},
+  {"AT+GMR\r", response_version},
   {"AT+GMM\r", response_model},
   {"AT+CPIN?\r", response_cpin},
   {"AT+CNUM\r", response_cnum},
   {"AT+CMGD=0,4\r", NULL},
-  {"AT+CNMI=2,1,0,0,0\r", NULL},
-  {"AT+CGREG=1\r", NULL},
-  
+  {"AT+CNMI=2,2,0,0,0\r", NULL},
+  {"AT+CMGL=0\r", response_cmgl},
+
+  {"AT+CMGF=0\r", NULL},
   {"AT+CGREG?\r", response_cgreg},
   {"AT+CEREG=1\r", NULL},
-  {"AT+CMGF=0\r", NULL},
-  {"AT+CSQ?\r", NULL},
+  {"AT+COPS?\r", response_cops},
   {"AT+CGDCONT?\r", response_cgdcont},
-  {"AT+CMGL=0\r", NULL},
+  {"AT+CGREG=1\r", NULL},
   {"AT+CMEE=1\r", NULL},
   {"AT+CCLK?\r", response_cclk},
   {"AT+CIMI\r", response_cimi},
@@ -102,16 +101,16 @@ const comm_info_t cmd_table[] =
   {"AT+QCPS?\r", response_qcps},
   {"AT+QCOTA?\r", response_qcota},
   
-  {"AT+QCOTA=1\r", NULL},
   {"AT+QCNC?\r", response_qcnc},
   {"AT+QCNC=1,1,1\r", NULL},
   {"AT+ICCID\r", response_iccid},
-  {"AT+QTEMP\r", response_temp},
+  {"AT^DSCI=1\r", NULL}, 
   {"AT+QCFG=\"band\"\r", response_band},
-  {"AT+QCFG=\"band\",10,15,0\r", NULL},
-  {"AT+QCFG=\"PDP/DuplicateChk\"\r", response_pdp_duplicate},
-  {"AT+QCFG=\"PDP/DuplicateChk\",1\r", NULL},
+  {"AT+CNMI=2,2,1,0,0\r", NULL},
+  {"AT+CLVL?\r", response_clvl},
+  {"AT+CMVL?\r", response_cmvl},
   {"AT+QCFG=\"nwscanmode\"\r", response_nwscanmode},
+  {"AT+QCFG=\"nwscanmode\",2\r", NULL},
   
   {"AT+QCFG=\"nwscanmode\",0\r", NULL},
   {"AT+QCFG=\"nwscanmode\",3\r", NULL},
@@ -126,8 +125,8 @@ const comm_info_t cmd_table[] =
   
   {"AT+QURCCFG=\"urcport\",\"uart1\"\r", NULL},
   {"AT+QURCCFG=\"urcport\",\"all\"\r", NULL},
+  {"AT+CLCC\r", NULL},
   {"AT+QICSGP?\r", response_qicsgp},
-  {"AT+QICSGP=1,1,\"lte-internet.sktelecom.com\"\r", NULL},
   {"AT+QIACT?\r", response_qiact},
   {"AT+QIACT=1\r", NULL},
   {"AT+QIDEACT=1\r", NULL},
@@ -144,18 +143,14 @@ const comm_info_t cmd_table[] =
   {"AT+QSIMDET=1,1\r", NULL},
   {"AT+QSIMSTAT?\r", response_qsimstat},
   {"AT+QGPIO=0,34\r", response_sim_presence},
-  {"AT+CLCC\r", NULL},
+  {"AT+QTEMP\r", response_temp},
   
   {"AT+QADC=0\r", response_adc},
   {"AT+QADC=1\r", response_adc},
-  {"AT+CLVL?\r", response_clvl},
-  {"AT+CMVL?\r", response_cmvl},
-  {"AT+CGDCONT=1,\"IP\",\"lte-internet.sktelecom.com\"\r", NULL},
-  {"AT^DSCI=1\r", NULL},
-  {"AT+COPS?\r", response_cops},
+  
 };
 
-char APN_NAME[100] = "lte-internet.sktelecom.com";
+char APN_NAME[100] = "notset";
 
 DWORD argument_mask = MSG_ERROR;
 
@@ -170,7 +165,7 @@ byte m_nCidLists = 0;
 
 int g_nSendPDULength;
 int g_nRecvMessageIndex;
-int g_nRSSI, g_nRSRP;
+int g_nRSSI, g_nRSRP, g_nRSRQ;
 #if 0//def SUPPORT_VOICE_CALL
 int g_nCallInfoCount = 0;
 #endif
@@ -216,12 +211,9 @@ static  int		 m_nAgentQueID;
 static  int    m_nDataCallPID = 0;
 static  int		 m_nTCPIPQueID;
 
-//static char UART_CMD[16]  = "/dev/ttyS4";
-//static char USB_CMD[16]   = "/dev/ttyUSB2";
-static char RAS_PORT[16]  = "/dev/ttyUSB3";
-//static char DIAG_PORT[16] = "/dev/ttyUSB0";
 
 static char CMD_PORT[16];
+static char DUN_PORT[16]  = "/dev/ttyUSB3";
 
 
 static pthread_mutex_t s_connectmutex = PTHREAD_MUTEX_INITIALIZER;
@@ -326,34 +318,25 @@ int ParseArgs(int argc, char *argv[])
 {
   int i, ret = 1;
 
-  // rild -dbg -at /dev/ttyS4 -ppp
+  // rild -d /dev/ttyS4 -p -a lte.ktfwing.com -v
   for (i=1; i < argc; i++)
   {
-    if (!strcmp("-v", argv[i]))
-    {
-      DEBUG(MSG_ERROR, "ver: %s\n", AGENT_VERSION);
-      ret = -1;
-    }
-    else if (!strcmp("-at", argv[i]))
+    if (!strcmp("-d", argv[i]))
     {
       if (NULL != argv[i+1])
     	{
         strncpy(CMD_PORT, argv[++i], sizeof(CMD_PORT)-1);
     	}
     }
-    else if (!strcmp("-dbg", argv[i]))
-    {
-      argument_mask |= (MSG_ERROR|MSG_HIGH|MSG_MID|MSG_LOW);
-    }
-    else if (!strcmp("-ppp", argv[i]))
+    else if (!strcmp("-p", argv[i]))
     {
       argument_mask |= NET_PPP_AUTO;
     }
-    else if (!strcmp("-eth", argv[i]))
+    else if (!strcmp("-e", argv[i]))
     {
       argument_mask |= NET_ETH_AUTO;
     }
-		else if (!strcmp("-apn", argv[i]))
+		else if (!strcmp("-a", argv[i]))
     {
       if (NULL != argv[i+1] && *argv[i+1] != '-')
     	{
@@ -369,7 +352,12 @@ int ParseArgs(int argc, char *argv[])
 				}
     	}
     }
+		else if (!strcmp("-v", argv[i]))
+		{
+			argument_mask |= (MSG_ERROR|MSG_HIGH|MSG_MID|MSG_LOW);
+		}
   }
+
 
   if ( !strncmp(CMD_PORT, "/dev/", 5) )
   {
@@ -510,13 +498,15 @@ int main(int argc, char *argv[])
   int recvSize, msgSize;
   Msg2Agent *msg = (Msg2Agent *)msg_buf;
 
+	DEBUG(MSG_ERROR, "ver: %s\n", AGENT_VERSION);
+
   if (ParseArgs(argc, argv) < 0){
     return 0;
   }
 
   if (DAEMON_MODE & argument_mask) Daemonize();
 
-  //InitWatchDog();
+  InitWatchDog();
   InitAgent();
   SigRegister();
   Init1SecTick();
@@ -599,7 +589,7 @@ int main(int argc, char *argv[])
   Deinit1SecTick();
   SigDeregister();
   DeinitAgent();
-  //DeinitWatchDog();
+  DeinitWatchDog();
 
   DEBUG(MSG_ERROR, "agent terminated!!!\n");
 
@@ -722,7 +712,8 @@ void InitModem(int simState)
     SendCommand(AT_QICFG_DATAFORMAT_0_1, FALSE, NULL);
 #endif
 #endif // SUPPORT_TCP_CMD
-    //SendCommand(AT_QCFG_PDPDUP,FALSE, NULL);
+		SendCommand(AT_QCFG_BAND,FALSE, NULL);
+		SendCommand(AT_QCFG_NW,FALSE, NULL);
     SendCommand(AT_CGREG_1,FALSE, NULL);
     SendCommand(AT_CMEE_1, FALSE, NULL);
     SendCommand(AT_CPIN,   FALSE, NULL);
@@ -737,18 +728,20 @@ void InitModem(int simState)
 #ifdef SUPPORT_VOICE_CALL
     SendCommand(AT_DSCI_1, FALSE, NULL);
 #endif
-    SendCommand(AT_CNMI_2_1, FALSE, NULL);
     SendCommand(AT_CMGF_0,   FALSE, NULL);
+		SendCommand(AT_CMGL_0,	 FALSE, NULL);
     SendCommand(AT_CMGD_0_4, FALSE, NULL);
+    SendCommand(AT_CNMI_2_2, FALSE, NULL);
 
     SendCommand(AT_ICCID,    FALSE, NULL);
+		SendCommand(AT_CIMI,     FALSE, NULL);
     SendCommand(AT_CNUM,     FALSE, NULL);
     SendCommand(AT_QCDS,     FALSE, NULL);
 #ifdef SUPPORT_MODEM_SLEEP
     SendCommand(AT_QSCLK_1,  FALSE, NULL);
 #endif    
     SendCommand(AT_CCLK,     FALSE, NULL);
-    SendCommand(AT_COPS,   FALSE, NULL);
+    SendCommand(AT_COPS,     FALSE, NULL);
 		SendCommand(AT_CGPADDR,  FALSE, NULL);
 
     //SendAlertMsg(0, ERR_MODEM_RECOVERY_OK);
@@ -919,7 +912,6 @@ void SendCommand(BYTE cmd_id, BOOL at_first, const char * format, ...)
 void ParseCodes(char chByte)
 {
     static BOOL fCMGR = FALSE;
-    static BOOL fCMGL = FALSE;
     static char pResponse[AT_RESPONSE_SIZE];
     static int  nBufferLen = 0;
 
@@ -1017,43 +1009,6 @@ void ParseCodes(char chByte)
                     int  msg_len = 0;
                   
                     fCMGR = FALSE;
-                    msg_len = DecodePDU(pResponse, &msg_type, strCallerNumber, strRecvMessage, NULL);
-                    if (msg_len > 0)
-                    {
-                      DEBUG(MSG_HIGH, "MSG type %d, Len %d, Num Len %d \r\n", msg_type, msg_len, strlen(strCallerNumber));
-                      SendSMSRecv(strCallerNumber, msg_type, strRecvMessage, msg_len);
-                    }
-                  }
-                }
-                break;
-
-            case AT_CMGL_0 :
-                /*
-                  +CMGL: 0,0,,32
-                  |------------------------------------------------------------------------------|
-                  0791280102194105440BA11091041852F00084218013414441630D0A22080B811091041852F0A4B2
-                  |------------------------------------------------------------------------------|
-                  +CMGL: 1,0,,32
-                  |------------------------------------------------------------------------------|
-                  0791280102194105440BA11091041852F00084218013414451630D0A22080B811091041852F0A4B2
-                  |------------------------------------------------------------------------------|
-                */
-
-                if ('+' == *pResponse)
-                {
-                  fCMGL = TRUE;
-                }
-                else
-                {
-                  if (fCMGL)
-                  {
-                    char strRecvMessage[MAX_MESSAGE_LENGTH+4] = {0,};
-                    char strCallerNumber[MAX_NUMBER_LENGTH+4];
-                    int  msg_type = 0;
-                    int  msg_len = 0;
-                    
-                    fCMGL = FALSE;
-                    
                     msg_len = DecodePDU(pResponse, &msg_type, strCallerNumber, strRecvMessage, NULL);
                     if (msg_len > 0)
                     {
@@ -1313,17 +1268,17 @@ void OnReadMsgQue(int pid, int wparm, void *pMsgQ)
   {
        case SYS_CONTROL:
       
-          ProcSysControl(wparm);
+          ProcSysControl(pid, *((BYTE*)pMsgQ));
           break;
 
        case DATA_CONNECT:
       
-          RASConnect(pid);
+          DUNConnect(pid);
           break;
           
       case DATA_DISCONNECT:
 
-          RASDisconnect(pid);
+          DUNDisconnect(pid);
           break;
 
       case SMS_SEND :
@@ -1352,6 +1307,19 @@ void OnReadMsgQue(int pid, int wparm, void *pMsgQ)
           OnTCPClose(pid);
           break;
 #endif 
+
+			case BAND_SET:
+					OnBandSet((BandInfoT*)pMsgQ);
+					break;
+			
+			case SCAN_SET:
+					OnScanSet(*((BYTE*)pMsgQ));
+					break;
+			
+			case APN_SET:
+					OnApnSet((APNInfoT*)pMsgQ);
+					break;
+					
  #ifdef SUPPORT_VOICE_CALL
       case CALL_DIAL :
       
@@ -1461,6 +1429,35 @@ void OnSendSMS(int pid, SmsMsgT *sms)
   g_pidOfSMS = pid;
   SetSMSState(pid, SMS_Sending);
 }
+
+
+void OnApnSet(APNInfoT *p)
+{
+
+	strcpy(APN_NAME, p->apn);
+
+	SendCommand(AT_CGDCONT_1, FALSE, "AT+CGDCONT=1,\"IPV4V6\",\"%s\"\r", APN_NAME);
+
+}
+
+void OnScanSet(BYTE mode)
+{
+	int cmd = AT_QCFG_NW_AUTO;
+	
+	if (mode == NET_SCAN_WCDMA)
+		cmd = AT_QCFG_NW_WCDMA;
+	else if (mode == NET_SCAN_LTE)
+		cmd = AT_QCFG_NW_LTE;
+
+	SendCommand(cmd, FALSE, NULL);
+}
+
+void OnBandSet(BandInfoT *p)
+{
+
+	SendCommand(AT_QCFG_BAND_X, FALSE, "AT+QCFG=\"band\",10,%x\r", p->nFDDLTE);
+}
+
 
 #ifdef SUPPORT_TCP_CMD  
 int GetPidBySockId(int nSock)
@@ -1577,8 +1574,6 @@ void OnTCPSend(int pid, int length)
 void OnTCPOpen(int pid, TcpServerT *srv_ptr)
 {
   TcpDataT msg;
-  IPAddrT srvIp = srv_ptr->ip_addr;
-  WORD port = srv_ptr->remote_port;
 
   int msgSize = sizeof(TcpDataT) - sizeof(msg.pid); 
 
@@ -1596,8 +1591,9 @@ void OnTCPOpen(int pid, TcpServerT *srv_ptr)
     return;
   }
 
-  SendCommand(AT_QIOPEN_1, FALSE, "AT+QIOPEN=1,%u,\"TCP\",\"%u.%u.%u.%u\",%u,0,1\r", socket_id, 
-                                          srvIp.digit1, srvIp.digit2, srvIp.digit3,srvIp.digit4, port);
+		
+  SendCommand(AT_QIOPEN_1, FALSE, "AT+QIOPEN=1,%u,\"TCP\",\"%s\",%u,0,1\r", socket_id, 
+                                        srv_ptr->addr, srv_ptr->port);
 }
 
 void OnTCPClose(int pid)
@@ -1701,8 +1697,21 @@ void ResetModem(int nCause)
   InitModem(SIM_NOT_INSERTED);
 }
 
-void ProcSysControl(int nId)
+void ProcSysControl(int pid, BYTE ctrl)
 {
+
+	if (ctrl == MODEM_PWROFF)
+	{
+		SendCommand(AT_SHDN, FALSE, NULL);
+	}
+	else if (ctrl == MODEM_RESET)
+	{
+		ResetModem(RESET_FROM_CLIENT);
+	}
+	else if (ctrl == MODEM_REBOOT)
+	{
+		SendCommand(AT_CFUN_1_1, FALSE, NULL);
+	}
 }
 
 void OnNetStatus(void)
@@ -1755,7 +1764,7 @@ void OnSerialError(int err, int sub_err)
   }
 }
 
-void RASConnect(int pid)
+void DUNConnect(int pid)
 {
 	int ret;
 
@@ -1770,7 +1779,7 @@ void RASConnect(int pid)
   }
 
   // usb check;
-  if (access(RAS_PORT, F_OK) != 0)
+  if (access(DUN_PORT, F_OK) != 0)
   {
     SetRASState(0, RAS_Error);
 
@@ -1780,16 +1789,16 @@ void RASConnect(int pid)
 	
 	if (!m_hWanThread)
 	{
-		ret = pthread_create(&m_hWanThread, NULL, (void *)RasThread, NULL);
+		ret = pthread_create(&m_hWanThread, NULL, (void *)DunThread, NULL);
 		if(ret) {
 		  SetRASState(0, RAS_Error);
-			DEBUG(MSG_ERROR,"RasThread create failed!\n");
+			DEBUG(MSG_ERROR,"DunThread create failed!\n");
 			return;
 		}
 	}
 }
 
-void RASDisconnect(int pid)
+void DUNDisconnect(int pid)
 {
 	if (argument_mask & NET_INF_TASK){
 	  return;
@@ -1831,7 +1840,7 @@ void RASDisconnect(int pid)
 #endif
 }
 
-void *RasThread(void *lpParam)
+void *DunThread(void *lpParam)
 {
 	int ret, status = 0;
 
@@ -1864,7 +1873,7 @@ void *RasThread(void *lpParam)
 		if (ret < 20){
   		SendMsgQue(WM_USER_RAS_RES, RAS_Connected, status);
 
-    	ret = waitpid(m_nDataCallPID, &status, 0); /* WNOHANG : \C0ڽ\C4 \C7\C1\B7μ\BC\BD\BA\B0\A1 \BE\F8\C0\BB \B0\E6\BF\EC \B9ٷ\CE \B8\AE\C5\CF */
+    	ret = waitpid(m_nDataCallPID, &status, 0); 
     	m_nDataCallPID = 0;
       SendMsgQue(WM_USER_RAS_RES, RAS_Idle, 0);
   	}else{
@@ -1898,7 +1907,7 @@ void *RasThread(void *lpParam)
 	SendMsgQue(WM_USER_RAS_RES, ret, 0);
 #endif
 
-	DEBUG(MSG_ERROR, "RasThread exit %d\n", ret);
+	DEBUG(MSG_ERROR, "DunThread exit %d\n", ret);
 	pthread_exit(NULL);
 
 	return NULL;
@@ -1970,21 +1979,21 @@ void DeinitDataIntf(void)
 void *ConnThread(void *lpParam)
 {
   if (argument_mask & NET_PPP_AUTO)
-    RasMainLoop();
+    DunMainLoop();
   else if (argument_mask & NET_ETH_AUTO)
     EthMainLoop();
 
   return NULL;
 }
 
-void RasMainLoop(void)
+void DunMainLoop(void)
 {
   enum {RAS_OK, PORT_NO, SRV_NO };
 	int ret, status = RAS_OK;
 
   while(1)
   {
-    if (!IsTTYAvailable(RAS_PORT))
+    if (!IsTTYAvailable(DUN_PORT))
     {
       DEBUG(MSG_ERROR,"[RAS]USB not found!\n");
       sleep(3);
@@ -2277,24 +2286,11 @@ BOOL IsServiceOkay(void)
 
 BOOL IsRegistered(void)
 {
-#if 0
-  if (GetRadioTech() == NET_LTE)
-  {
-    IPAddrT ipAddr; 
-    GetMdmIPAddr(&ipAddr);
-    if (ipAddr.digit1 != 0 && ipAddr.digit4 != 0)
-      return TRUE;
-  }
-  else
-  {
-    if (REG_REGISTERED == g_eRegistration)
+  if (REG_REGISTERED == g_eRegistration) {
       return TRUE;
   }
 
   return FALSE;
-#else
-  return TRUE;
-#endif
 }
 
 

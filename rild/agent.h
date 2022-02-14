@@ -4,29 +4,25 @@
 #include "serialport.h"
 
 
-#define TIMER_AT_CMGL_0_RESULT_WAIT     9 // 60초
-#define TIMER_AT_QICLOSE_RESULT_WAIT    12 // 60초
-#define TIMER_AT_COMMAND_RESULT_WAIT    3   // 3초
-#define TIMER_MODEM_STATUS              5   // 5초 타이머 (모뎀 상태 확인)
+#define TIMER_AT_CMGL_0_RESULT_WAIT     9 // sec
+#define TIMER_AT_QICLOSE_RESULT_WAIT    10 // 10 sec
+#define TIMER_AT_COMMAND_RESULT_WAIT    3  
+#define TIMER_MODEM_STATUS              5  // every 5 sec
 
 #define MAX_CMD_FIFO_SZ             128
 
-/* Agent Window messages */
-//#define WM_USER_MSG_PROC	  (WM_USER+250)
+#define WM_USER_DESTROY     (WM_USER+256)
 #define WM_USER_AT_CMD		  (WM_USER+257)
 #define WM_USER_RX_CHAR   	(WM_USER+259)	
 #define WM_USER_RX_ERROR  	(WM_USER+261)
 #define WM_USER_RAS_RES    	(WM_USER+262)
-#define WM_USER_NET_STAT    (WM_USER+285)
-#define WM_USER_KEY_PROC    (WM_USER+286)
-#define WM_USER_DMS_CMD     (WM_USER+287)
+#define WM_USER_NET_STAT    (WM_USER+265)
 
 #define COUNT_SIM_NOT_INSERTED 10
 #define COUNT_MSISDN_NOT_FOUND 10
 
 #define SKT_DEFAULT_APN "lte-internet.sktelecom.com"
 #define KT_DEFAULT_APN  "privatelte.ktfwing.com"
-#define KT_SECOND_APN   "lte.ktfwing.com"
 
 enum
 {
@@ -38,15 +34,15 @@ enum
     AT_CPIN,
     AT_CNUM,
     AT_CMGD_0_4,
-    AT_CNMI_2_1,
-    AT_CGREG_1,
+    AT_CNMI_2_2,
+    AT_CMGL_0,
     
-    AT_CGREG, // 10
+    AT_CMGF_0,  // 10
+    AT_CGREG,
     AT_CEREG_1,
-    AT_CMGF_0, 
-    AT_CSQ,
+    AT_COPS,
     AT_CGDCONT,
-    AT_CMGL_0, 
+    AT_CGREG_1 , 
     AT_CMEE_1,
     AT_CCLK,
     AT_CIMI,
@@ -63,16 +59,16 @@ enum
     AT_QCPS,
     AT_QCOTA,
     
-    AT_QCOTA_1, // 30
-    AT_QCNC,    
+    AT_QCNC,    // 30
     AT_QCNC_1_1_1,
     AT_ICCID, 
-    AT_TEMP,
+    AT_DSCI_1,
     AT_QCFG_BAND,
-    AT_QCFG_BAND_15,
-    AT_QCFG_PDPDUP,
-    AT_QCFG_PDPDUP_1,
+    AT_CNMI_2_2_1,
+    AT_CLVL,
+    AT_CMVL,
     AT_QCFG_NW,   
+    AT_QCFG_NW_WCDMA,
     
     AT_QCFG_NW_AUTO, // 40
     AT_QCFG_NW_LTE,  
@@ -87,8 +83,8 @@ enum
     
     AT_QURCCFG_UART, // 50
     AT_QURCCFG_ALL, 
+    AT_CLCC,
     AT_QICSGP,   
-    AT_QICSGP_1, 
     AT_QIACT,
     AT_QIACT_1,
     AT_QIDEACT_1,
@@ -105,15 +101,11 @@ enum
     AT_QSIMDET_1_1,
     AT_QSIMSTAT,
     AT_SIM_PRESENCE,
-    AT_CLCC,
+    AT_TEMP,
 
     AT_ADC_0,  // 70
     AT_ADC_1,  
-    AT_CLVL,
-    AT_CMVL,
-    AT_CGDCONT_1,
-    AT_DSCI_1,
-    AT_COPS,
+    
     
 ////////////////////////////////////////////////////////////
     ATD = 128,
@@ -132,8 +124,8 @@ enum
     AT_QICLOSE,
 
     AT_QIDNSGIP,
-    AT_QCFG_BAND_XX,
-    AT_CGDCONT_X
+    AT_QCFG_BAND_X,
+    AT_CGDCONT_1
 };
 
 
@@ -146,7 +138,7 @@ enum
   RESET_IP_MISMATCH = 0x4,
   RESET_QCOTA_DONE  = 0x8,
   RESET_USIM_FAULT  = 0x10,
-  RESET_BY_EXTERNAL = 0x20,
+  RESET_FROM_CLIENT = 0x20,
 };
 
 enum 
@@ -220,7 +212,7 @@ extern byte m_nCidLists ;
 
 extern int g_nSendPDULength;
 extern int g_nRecvMessageIndex;
-extern int g_nRSSI, g_nRSRP;
+extern int g_nRSSI, g_nRSRP, g_nRSRQ;
 #if 0//def SUPPORT_VOICE_CALL
 extern int g_nCallInfoCount;
 #endif
@@ -252,7 +244,7 @@ int  InitConnMgr(void);
 int  DeinitConnMgr(void);
 
 void ResetModem(int nCause);
-void ProcSysControl(int nId);
+void ProcSysControl(int pid, BYTE ctrl);
 
 DWORD GetTickCount(void);
 void  SendMsgQue (int msg_id, int wparm, int lparm);
@@ -272,15 +264,18 @@ void OnNetStatus(void);
 void OnUserSignal(int sig);
 void OnRasResult(int eStat,int sStat);
 void OnSerialError(int err, int sub_err);
+void OnApnSet(APNInfoT *p);
+void OnScanSet(BYTE mode);
+void OnBandSet(BandInfoT *p);
 
-void RASConnect(int pid);
-void RASDisconnect(int pid);
+void DUNConnect(int pid);
+void DUNDisconnect(int pid);
 
 void InitDataIntf(void);
 void DeinitDataIntf(void);
-void *RasThread(void *lpParam);
+void *DunThread(void *lpParam);
 void *ConnThread(void *lpParam);
-void RasMainLoop(void);
+void DunMainLoop(void);
 void EthMainLoop(void);
 
 void *SerRxThread(void *lpParam);
@@ -296,7 +291,7 @@ void RemoveProcess(int pid);
 void RemoveAllProc(int pid);
 
 #ifdef SUPPORT_TCP_CMD  
-void TcpOpen(int pid, IPAddrT *srvIp, WORD port);
+void TcpOpen(int pid, char *addr, WORD port);
 void TcpClose(int pid);
 void TCPClosed(int pid, int err);
 

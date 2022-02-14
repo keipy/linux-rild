@@ -37,6 +37,9 @@ static int         s_fifoToClient= 0;
 static void _attach() __attribute__((constructor));
 static void _detach() __attribute__((destructor)) ;
 
+int WriteMsgQueue(int caller_pid, int wparm, void* lpBuffer, int buffSize);
+
+
 void _attach()
 {
   int shm_id;
@@ -381,7 +384,7 @@ int SetMicVolume(int nGain)
 }
 
 
-int TCPOpen(IPAddrT *server_ip, WORD remote_port)
+int TCPOpen(char *addr, WORD port)
 {
   int pid = getpid();
   char fifo_name[64] = {0, };
@@ -411,8 +414,8 @@ int TCPOpen(IPAddrT *server_ip, WORD remote_port)
   } 
 
   TcpServerT msg;
-  memcpy(&msg.ip_addr, server_ip, sizeof(IPAddrT));
-  msg.remote_port = remote_port;
+  strncpy(msg.addr, addr, sizeof(msg.addr));
+  msg.port = port;
   
   if (!WriteMsgQueue(pid, TCP_OPEN, &msg, sizeof(TcpServerT)))
   {
@@ -486,6 +489,37 @@ int TCPStatus()
   return WriteMsgQueue(getpid(), TCP_STATUS, NULL, 0);
 }
 
+int SetBands(int wcdma, int lte)
+{
+  BandInfoT msg;
+  msg.nFDDLTE = lte;
+	msg.nWCDMA = wcdma;
+
+  return WriteMsgQueue(getpid(), BAND_SET, &msg, sizeof(msg));
+}
+
+int SetAPN(char *apn)
+{
+  APNInfoT msg;
+
+	if (strlen(apn) >= sizeof(msg.apn)) {
+		SetLastError(ERR_INVALID_PARAMETER);
+		return -1;
+	}
+	
+  msg.nPdnType = PDN_IPV4V6;
+	strcpy(msg.apn, apn);
+
+	return WriteMsgQueue(getpid(), APN_SET, &msg, sizeof(msg));
+}
+
+int SetNwScan(int mode)
+{
+	byte bMode = (byte)mode;
+
+	return WriteMsgQueue(getpid(), SCAN_SET, &bMode, sizeof(bMode));
+}
+
 int SystemControl(int nCtrl)
 {
   byte bCtrl = (byte)nCtrl;
@@ -495,7 +529,7 @@ int SystemControl(int nCtrl)
 
 char *GetPhoneNumber(void)
 {
-  return s_pSharedData->modemInfo.strPhoneNumber;
+  return s_pSharedData->simInfo.strPhoneNumber;
 }
 
 int GetDataState(void)
@@ -533,30 +567,41 @@ int GetRSRP(void)
   return s_pSharedData->nRSRP;
 }
 
+int GetRSRQ(void)
+{
+  return s_pSharedData->nRSRQ;
+}
+
+
 int GetRadioTech(void)
 {
   return s_pSharedData->nRadioTech;
 }
 
-void GetLocalIPAddr(IPAddrT *ip_ptr)
+int GetIPAddress(IPAddrT *ip_ptr)
 {
+
+	if (s_pSharedData->modemIP.ip_version == IP_VER_NONE) 
+		return -1;
+
   memcpy(ip_ptr, &(s_pSharedData->modemIP), sizeof(IPAddrT));
+	return 0;
 }
 
 char *GetRilVersion(void)
 {
-  return RILLIB_VERSION;
+  return s_pSharedData->strAgentVer;
 }
 
 
 int GetModemVolume(void)
 {
-  return 0;//s_pSharedData->nModemVolume;
+  return s_pSharedData->nModemVolume;
 }
 
 int GetModemMicGain(void)
 {
-  return 0;//s_pSharedData->nModemMicGain;
+  return s_pSharedData->nModemMicGain;
 }
 
 
@@ -565,8 +610,29 @@ int GetSIMStatus(void)
   return s_pSharedData->eSIMState;
 }
 
-char* GetICCID(void)
+char* GetSIMID(void)
 {
-  return s_pSharedData->strICCID;
+  return s_pSharedData->simInfo.strICCID;
 }
+
+char *GetAPN(void)
+{
+	return s_pSharedData->modemInfo.strAPN;
+}
+
+int GetLTEBands(void)
+{
+	return s_pSharedData->nLTEBands;
+}
+
+int GetWCDMABands(void)
+{
+	return s_pSharedData->nWCDMABands;
+}
+
+int GetNWScanMode(void)
+{
+	return s_pSharedData->nNwScanMode;
+}
+
 

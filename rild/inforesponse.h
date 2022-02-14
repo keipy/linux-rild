@@ -22,7 +22,6 @@ int response_qcnc(char * pResponse);
 int response_qcsq(char * pResponse);
 int response_cgpaddr(char * pResponse);
 int response_band(char * pResponse);
-int response_pdp_duplicate(char * pResponse);
 int response_nwscanmode(char * pResponse);
 int response_risignaltype(char * pResponse);
 int response_apready(char * pResponse);
@@ -40,7 +39,7 @@ int response_sim_presence(char *pResponse);
 int response_clvl(char *pResponse);
 int response_cmvl(char *pResponse);
 int response_cops(char *pResponse);
-
+int response_cmgl(char *pResponse);
 
 #endif
 

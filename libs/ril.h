@@ -169,6 +169,31 @@ enum
     ERR_TCPIP_PDP_DEACTIVATED = 599,
 };
 
+enum {
+	IP_VER_NONE = 0,
+  IP_VER_4 = 1,
+	IP_VER_6 = 2,
+};
+
+enum {
+	NET_SCAN_AUTO = 0,
+	NET_SCAN_WCDMA = 2,
+	NET_SCAN_LTE = 3,
+};
+
+enum
+{
+  MODEM_RESET = 0,
+  MODEM_REBOOT,
+  MODEM_PWROFF,
+};
+
+enum
+{
+  PDN_IPV4 = 0,
+  PDN_IPV6,
+  PDN_IPV4V6,
+};
 
 
 typedef struct {
@@ -180,10 +205,22 @@ typedef struct {
 
 typedef struct
 {
-  unsigned char digit1;
-  unsigned char digit2;
-  unsigned char digit3;
-  unsigned char digit4;
+	unsigned char digit[4];
+}IPv4_T;
+
+typedef struct
+{
+	unsigned short seg[8];
+}IPv6_T;
+
+
+typedef struct
+{
+  int ip_version;
+  union {
+    IPv4_T ipv4; 
+    IPv6_T ipv6;
+  } addr;
 } IPAddrT;
 
 typedef struct
@@ -201,8 +238,8 @@ typedef struct
 
 typedef struct
 {
-  IPAddrT ip_addr;
-  WORD remote_port;
+  char addr[256];
+  WORD port;
 } TcpServerT;
 
 
@@ -212,6 +249,18 @@ typedef struct {
   BYTE data[MAX_TCP_DATA_LENGTH];
 } TcpDataT;
 
+
+typedef struct  
+{
+  int nPdnType;
+  char apn[100];
+} APNInfoT;
+
+typedef struct
+{
+  int nWCDMA;
+  int nFDDLTE;
+} BandInfoT;
 
 typedef struct  
 {
@@ -252,8 +301,8 @@ enum
 /*
   GetSIMStatus()
   "\B9\F8ȣ\B5\EE\B7\CF \C8\C4 \BB\E7\BF\EB\C0\CC \B0\A1\B4\C9\C7մϴ\D9" ===> SIM_NONE_MSISDN
-  "\B0\B3\C5\EB\C0\CC \C7ʿ\E4\C7մϴ\D9. \B0\ED\B0\B4\BC\BE\C5\CD \B6Ǵ\C2 \B4븮\C1\A1\C0\B8\B7\CE \B9湮\C7Ͽ\A9 \C1ֽʽÿ\E4." ===> SIM_NONE_PROVISIONING
-  "USIMī\B5尡 \C0νĵ\C7\C1\F6 \BEʽ\C0\B4ϴ\D9"   ===> SIM_NOT_INSERTED
+  "\B0\B3\C5\EB\C0\CC \C7ʿ\E4\C7մϴ\D9. \B0\ED\B0\B4\BC\BE\C5\CD \B6Ǵ\C2 \B4�?C1\A1\C0\B8\B7\CE \B9�?C7Ͽ\A9 \C1ֽʽÿ\E4." ===> SIM_NONE_PROVISIONING
+  "USIMī\B5�?\C0νĵ\C7\C1\F6 \BEʽ\C0\B4ϴ\D9"   ===> SIM_NOT_INSERTED
 */
 enum
 {
@@ -271,7 +320,7 @@ enum
 
 int  DataConnect();
 int  DataDisconnect();
-int  TCPOpen(IPAddrT *server_ip, WORD remote_port);
+int  TCPOpen(char *addr, WORD port);
 int  TCPSend(BYTE *data, int len);
 int  TCPRecv(BYTE *data, int len);
 int  TCPClose();
@@ -284,31 +333,38 @@ int  SendDTMF(char cDtmf);
 int  SendSMS(char *pNumber, char *pMessage, int nType);
 int  SetSpeakerVolume(int nVol);
 int  SetMicVolume(int nGain);
+int  SetBands(int wcdma, int lte);
+int  SetAPN(char *apn);
+int  SetNwScan(int mode);
+int  SystemControl(int nCtrl);
+
 
 char *GetPhoneNumber(void);
-
 char *GetNetworkName(void);
 char *GetModemVersion(void);
 char *GetSerialNumber(void);
-
-char* GetICCID(void);
+char* GetSIMID(void);
+char *GetRilVersion(void);
+int  GetIPAddress(IPAddrT *ip_ptr);
+char *GetAPN(void);
 
 int  GetDataState(void);
 int  GetRegistration(void);
 int  GetRSSI(void);
 int  GetRSRP(void);
+int  GetRSRQ(void);
 int  GetRadioTech(void);
 int  GetSIMStatus(void);
 int  GetLastError(void);
 int  GetModemVolume(void);
 int  GetModemMicGain(void);
-void GetLocalIPAddr(IPAddrT *ip_ptr);
+int  GetLTEBands(void);
+int  GetWCDMABands(void);
+int  GetNWScanMode(void);
 
 
 int  WaitEvent(Msg2Client *msg_ptr, int msg_size, int wait_flag);
 int  SetEventMask(int mask);
-int  SystemControl(int nCtrl);
-char *GetRilVersion(void);
 #ifdef __cplusplus
 }
 #endif

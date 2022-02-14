@@ -21,15 +21,19 @@ unsigned char recvData[2048];
 unsigned char sendData[1024];
 char test_number[24];
 int modem_run = 0;
-IPAddrT addr;
+char addr[256];
 WORD  port = 8000;
+char apn[100];
 
 
 static pthread_t m_hModemThread;
 
-void TcpConnect(){
-  TCPOpen(&addr, port);
+void TcpConnect()
+{
+
+  TCPOpen(addr, port);
 }
+
 void TcpTransmit(){
   memset(sendData,       0x41, 64);
   memset(sendData+64,    0x20, 64);
@@ -164,10 +168,12 @@ void PrintUsage()
 	printf("2 : TCP connect\n");
 	printf("3 : TCP transmit\n");
 	printf("5 : TCP close\n");
-	printf("r : radio status\n");
+	printf("s: sms sending\n");
 	printf("i : general information\n");
-	printf("n : modem information\n");
-	printf("m: sms sending\n");
+	printf("m : modem information\n");
+	printf("r : radio status\n");
+	printf("6 : set APN\n");
+	printf("7 : set Scanmode\n");
 	printf("x: help\n");
 	printf("q : exit\n");
 }
@@ -182,30 +188,17 @@ int main(int argc, char *argv[])
 		if (!strcmp("-n", argv[i])){
 			strncpy(test_number, argv[++i], sizeof(test_number));
 		}
-		
-		else if (!strcmp("-i", argv[i])){
-		  char *pToken = NULL;
-			
-			pToken = strtok(argv[++i], " ,\".");
-			for (j = 0; NULL != pToken; j++)
-			{
-					if (0 == j)
-							addr.digit1 = (unsigned char)atoi(pToken);
-					else if (1 == j)
-							addr.digit2 = (unsigned char)atoi(pToken);
-					else if (2 == j)
-							addr.digit3 = (unsigned char)atoi(pToken);
-					else if (3 == j)
-							addr.digit4 = (unsigned char)atoi(pToken);
-		
-					pToken = strtok(NULL, " ,\".");
-			}
-
-			 printf("ipaddr %u.%u.%u.%u\n", addr.digit1, addr.digit2, addr.digit3, addr.digit4);
+		else if (!strcmp("-s", argv[i])){
+			strncpy(addr, argv[++i], sizeof(addr));
+			printf("ipaddr %s\n", addr);
 		}
 		else if (!strcmp("-p", argv[i])){
 			port = atoi(argv[++i]);
 			printf("port %u\n", port);
+		}
+		else if (!strcmp("-a", argv[i])){
+			strncpy(apn, argv[++i], sizeof(apn));
+			printf("apn %s\n", apn);
 		}
   }
 
@@ -271,7 +264,7 @@ int main(int argc, char *argv[])
     {
       HangUp();
     }
-    else if ('m' == ch)
+    else if ('s' == ch)
     {
       if (test_number[0] == 0)
 				printf("number not defined\n");
@@ -280,15 +273,40 @@ int main(int argc, char *argv[])
     }
     else if ('r' == ch)
     {
-      printf("RadioTech %d, RASStatus %d ICCID %s SIM x%x\n", GetRadioTech(), GetDataState(), GetICCID(), GetSIMStatus());
+      printf("Reg %d, RSSI %d, RSRP %d, RSRQ %d, Operator: %s\n", GetRegistration(), GetRSSI(), GetRSRP(), GetRSRQ(), GetNetworkName());
     }
     else if ('i' == ch)
     {
-      printf("RSSI %d, Registration %d, RSRP %d, Operator: %s\n", GetRSSI(), GetRegistration(), GetRSRP(), GetNetworkName());
+      printf("RadioTech %d, RASStatus %d, LTE Bands %x, SCAN Mode %d, APN %s \n", GetRadioTech(), GetDataState(), GetLTEBands(), GetNWScanMode(), GetAPN());
     }
-    else if ('n' == ch)
+    else if ('m' == ch)
     {
-      printf("IMEI %s, REV %s, NUM %s\n", GetSerialNumber(), GetModemVersion(), GetPhoneNumber());
+      IPAddrT  ipAddr;
+      printf("IMEI %s, VER %s, NUM %s, ICCID %s, SIM_Status x%x\n", GetSerialNumber(), GetModemVersion(), GetPhoneNumber(), GetSIMID(), GetSIMStatus());
+			
+			if (!GetIPAddress(&ipAddr)) {
+				if (ipAddr.ip_version == IP_VER_4){
+					printf("IPV4:  %d.%d.%d.%d\n", ipAddr.addr.ipv4.digit[0], ipAddr.addr.ipv4.digit[1], ipAddr.addr.ipv4.digit[2], ipAddr.addr.ipv4.digit[3]);
+				}
+				else {
+					printf("IPV6:  %x:%x:%x:%x:%x:%x:%x:%x\n", ipAddr.addr.ipv6.seg[0], ipAddr.addr.ipv6.seg[1], ipAddr.addr.ipv6.seg[2], ipAddr.addr.ipv6.seg[3], 
+																     ipAddr.addr.ipv6.seg[4], ipAddr.addr.ipv6.seg[5], ipAddr.addr.ipv6.seg[6], ipAddr.addr.ipv6.seg[7]);
+				}
+			}
+			
+    }
+		else if ('6' == ch)
+		{
+			SetAPN(apn);
+		}
+		else if ('7' == ch)
+		{
+		  printf("SCAN: 0:AUTO, 2:WCDMA, 3:LTE => ");
+			do{
+				ch = getchar();
+			}while (ch != '0' && ch != '2' && ch != '3');
+
+			SetNwScan( (int)(ch -'0'));
     }
 
   }

@@ -14,6 +14,14 @@
 
 #include "unsolicited.h"
 
+enum
+{
+  MSG_NONE,
+  MSG_CBM_PROCESSINIG,
+  MSG_SMS_PROCESSING,
+};
+
+int ps_sms_processing = MSG_NONE;
 
 /*
 +QIND: "POWER",1
@@ -39,15 +47,20 @@ const result_info_t urc_table[] =
   {"+CGREG: 1,",     10, urc_cgreg},
   {"+CPIN: ",         7, urc_cpin}, 
   {"+QIND: ",         7, urc_qind},
-  {"+CMTI: \"ME\",", 12, urc_cmti},
+ 
+	{"+CMT: ", 			    6,urc_cmt},
+  {"+CMTI: \"ME\",", 	12, urc_cmti},
   {"+CFUN: ",         7, urc_cfun}, 
   {"+CLIP: ",         7, urc_clip},
   {"+QIOPEN: ",       9, urc_qiopen},
   {"+QIURC: ",        8, urc_qiurc},  //  +QIURC: "recv",0,4
+  
+	{"+QUSIM: ", 	      8,urc_qusim},
   {"RING",            4, urc_ring},  
   {"CONNECT",         7, NULL}, 
   {"NO CARRIER",     10, urc_no_carrier},
-  {"^DSCI: ",         7,    urc_dsci },
+  {"^DSCI: ",         7, urc_dsci },
+	{ "RDY",					  3,urc_ready},
   /*
   {"BUSY",            4, NULL},
   {"+QSTKURC: ",     10, NULL},
@@ -55,6 +68,7 @@ const result_info_t urc_table[] =
   */
 };
 
+extern int response_cmgl(char *pResponse);
 
 
 int ParseUnsolRes(char *pResult)
@@ -64,12 +78,19 @@ int ParseUnsolRes(char *pResult)
 
   for (index = 0; index < urc_max_cnt; index++)
   {
-      if (0 == strncmp(pResult, urc_table[index].strCode, urc_table[index].lenCode ))
-          break;
+    if (0 == strncmp(pResult, urc_table[index].strCode, urc_table[index].lenCode ))
+      break;
   }
 
+	if (ps_sms_processing == MSG_SMS_PROCESSING)
+	{
+		ps_sms_processing = MSG_NONE;
+	  response_cmgl(pResult);
+		return 0;
+	}
+
   if (urc_max_cnt == index)
-      return -1;
+    return -1;
 
   if (urc_table[index].result)
   {
@@ -78,6 +99,14 @@ int ParseUnsolRes(char *pResult)
   
   return 0;
 }
+
+
+int urc_ready(char * pResult, int nIndex)
+{
+	ps_sms_processing = MSG_NONE;
+	return 0;
+}
+
 
 
 int urc_qiopen(char * pResult, int nIndex)
@@ -216,6 +245,12 @@ int urc_cpin(char * pResult, int nIndex)
   return 0;
 }
 
+int urc_qusim(char * pResult, int nIndex)
+{
+	return 0;
+}
+
+
 int urc_qind(char * pResult, int nIndex)
 {
   //+QIND: "RECOVERY","START"
@@ -240,6 +275,15 @@ int urc_qind(char * pResult, int nIndex)
   }
   
   return 0;
+}
+
+int urc_cmt(char * pResult, int nIndex)
+{
+	if(strstr(pResult, "+CMT"))
+	{
+		ps_sms_processing = MSG_SMS_PROCESSING; 
+	}
+	return 0;
 }
 
 int urc_cmti(char * pResult, int nIndex)

@@ -72,6 +72,7 @@ void Initialize(int pid, int qid, int tcp_qid)
   g_pSharedData->tcpipQue = tcp_qid;
   g_pSharedData->nRSSI    = RSSI_INIT_VALUE;
   g_pSharedData->nRSRP         = RSSI_INIT_VALUE;
+	g_pSharedData->nRSRQ = -20;
   g_pSharedData->nRejectCode   = 0;
   g_pSharedData->nRadioTech    = NET_UNKNOWN;
   g_pSharedData->eSIMState     = SIM_NONE;
@@ -137,7 +138,7 @@ BOOL SendToClient(int pid, int msgid, int wparm, void* lpBuffer, int buffSize)
       return -1;
     }
 
-    p_msg->rcvPID = pid; // pid = \BB\FD\BC\BA\C7\D1 process id \C1\DF \C7ϳ\AA.
+    p_msg->rcvPID = pid;
     p_msg->msgID = msgid;
     p_msg->wparm = wparm;
 
@@ -332,20 +333,33 @@ void SetRegistration(int nReg)
 
 void SetModemInfo(char *strInfo, int update)
 {
-  if (update & UPDATE_MODEMVERSION)
-    strcpy(g_pSharedData->modemInfo.strModemVersion, strInfo);
-  if (update & UPDATE_PHONENUMBER)
-    strcpy(g_pSharedData->modemInfo.strPhoneNumber, strInfo);
-  if (update & UPDATE_SERIALNUMBER)
-    strcpy(g_pSharedData->modemInfo.strSerialNumber, strInfo);
-  if (update & UPDATE_NETWORKNAME)
-    strcpy(g_pSharedData->modemInfo.strNetworkName, strInfo);
-}
-
-void SetICCID(char *strInfo)
-{
-  strncpy(g_pSharedData->strICCID, strInfo, MAX_ICCID_LENGTH-1);
-  g_pSharedData->strICCID[MAX_ICCID_LENGTH-1] = 0;
+	
+  if (update & UPDATE_MODEM_MODEL){
+    strncpy(g_pSharedData->modemInfo.strModelId, strInfo, MAX_MODEL_LENGTH);
+	}
+  else if (update & UPDATE_MODEMVERSION){
+    strncpy(g_pSharedData->modemInfo.strModemVersion, strInfo, MAX_VERSION_LENGTH);
+	}
+  else if (update & UPDATE_SERIALNUMBER){
+    strncpy(g_pSharedData->modemInfo.strSerialNumber, strInfo, MAX_SERIAL_LENGTH);
+	}
+  else if (update & UPDATE_NETWORKNAME){
+    strncpy(g_pSharedData->modemInfo.strNetworkName, strInfo, MAX_NETNAME_LENGTH);
+	}
+  else if (update & UPDATE_SIM_IMSI){
+    strncpy(g_pSharedData->simInfo.strIMSI, strInfo, MAX_IMSI_LENGTH);
+	}
+  else if (update & UPDATE_SIM_ICCID){
+    strncpy(g_pSharedData->simInfo.strICCID, strInfo, MAX_ICCID_LENGTH);
+	}
+  else if (update & UPDATE_PHONENUMBER){
+    strncpy(g_pSharedData->simInfo.strPhoneNumber, strInfo, MAX_NUMBER_LENGTH);
+	}
+	else if (update & UPDATE_APN){
+		strncpy(g_pSharedData->modemInfo.strAPN, strInfo, MAX_APN_LENGTH);
+	}
+	else
+		DEBUG(MSG_HIGH, "SetModemInfo : UNKNOWN => %s \r\n", strInfo);
 }
 
 void SetModemVolume(int nVol)
@@ -364,10 +378,11 @@ void SetRejectCode(int code)
   g_pSharedData->nRejectCode = code;
 }
 
-void SetRFState(int rssi, int rsrp)
+void SetRFState(int rssi, int rsrp, int rsrq)
 {
   g_pSharedData->nRSSI = rssi;
   g_pSharedData->nRSRP = rsrp;
+  g_pSharedData->nRSRQ = rsrq;
 }
 
 void SetRadioTech(int tech)
@@ -380,9 +395,24 @@ void SetUSIMState(int state)
   g_pSharedData->eSIMState = state;
 }
 
-int GetRASCount(void){
+void SetMdmIPAddr(IPAddrT *addr)
+{
+  memcpy(&(g_pSharedData->modemIP), addr, sizeof(IPAddrT));
+}
 
-  return 0;
+void SetLTEBands(int bands)
+{
+	g_pSharedData->nLTEBands = bands;
+}
+
+void SetWCDMABands(int bands)
+{
+	g_pSharedData->nWCDMABands =bands;
+}
+
+void SetNWScanMode(int mode)
+{
+	g_pSharedData->nNwScanMode = mode;
 }
 
 
@@ -391,14 +421,9 @@ int CheckClient(int pid)
   return 0;
 }
 
-void SetMdmIPAddr(IPAddrT *addr)
-{
-  memcpy(&(g_pSharedData->modemIP), addr, sizeof(IPAddrT));
-}
+int GetRASCount(void){
 
-char * GetPhoneNumber(void)
-{
-  return g_pSharedData->modemInfo.strPhoneNumber;
+  return 0;
 }
 
 int GetRASState(void)
@@ -436,6 +461,16 @@ void GetMdmIPAddr(IPAddrT *addr)
   memcpy(addr, &(g_pSharedData->modemIP), sizeof(IPAddrT));
 }
 
+char * GetModemModel(void)
+{
+  return g_pSharedData->modemInfo.strModelId;
+}
+
+char * GetPhoneNumber(void)
+{
+  return g_pSharedData->simInfo.strPhoneNumber;
+}
+
 char *GetModemVersion(void)
 {
   return g_pSharedData->modemInfo.strModemVersion;
@@ -447,7 +482,7 @@ char *GetModemSerial(void)
 }
 
 char *GetICCID(void){
-  return g_pSharedData->strICCID;
+  return g_pSharedData->simInfo.strICCID;
 }
 
 int GetRejectCode(void)

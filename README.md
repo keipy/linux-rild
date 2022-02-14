@@ -21,7 +21,7 @@ $ make
 **A. Execute rild daemon**  
 ```
 $ cd rild
-$ sudo ./rild -dbg -at /dev/ttyUSB3 &
+$ sudo ./rild -d /dev/ttyUSB2 -v &
 ```
 **B. Execute example**  
 ```

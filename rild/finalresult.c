@@ -97,12 +97,9 @@ int frc_ok(char * pResult, int nIndex)
     CmdPoolDel(AT_CMGS);
     //CmdPoolDel(AT_CMGS_PDU);
   }
-  if (currCommand == AT_CGDCONT) 
+  if (currCommand == AT_CGDCONT_1) 
   {
-    if (0 == (m_nCidLists & 0x1))
-      SendCommand(AT_CGDCONT_1, FALSE, NULL);
-    //if (0 == (m_nCidLists & 0x2))
-    //  SendCommand(AT_CGDCONT_2, FALSE);
+		SetModemInfo(APN_NAME, UPDATE_APN);
   }
   else if (currCommand == AT_CNUM) 
   {
@@ -120,10 +117,6 @@ int frc_ok(char * pResult, int nIndex)
         SendCommand(AT_CNUM, TRUE, NULL);
       }
     }
-  }
-  else if (currCommand == AT_QCOTA_1) 
-  {
-    ResetModem(RESET_QCOTA_DONE);
   }
 #ifdef SUPPORT_TCP_CMD
   else if (currCommand == AT_QICLOSE) 
@@ -209,7 +202,15 @@ int frc_ok(char * pResult, int nIndex)
     SetGPSState(GPS_Idle);
   }
 #endif
-
+	else if (AT_SHDN == currCommand)
+	{
+		SendMsgQue(WM_USER_DESTROY, 0, 0);
+	}
+	else if (AT_CFUN_1_1 == currCommand)
+	{
+		ResetModem(RESET_FROM_CLIENT);
+	}
+	
   return 0;
 }
 

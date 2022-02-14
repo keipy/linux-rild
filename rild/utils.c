@@ -993,7 +993,8 @@ int GetIpAddress(IPAddrT *ip_addr)
 	ifr.ifr_addr.sa_family = AF_INET;
 	if (ioctl(skfd, SIOCGIFADDR, &ifr) == 0) {
 		memcpy(ip_addr, &(ifr.ifr_addr.sa_data[2]), sizeof(IPAddrT));
-    DEBUG(MSG_ERROR, "IP] socket IP %u.%u.%u.%u\n", ip_addr->digit1, ip_addr->digit2, ip_addr->digit3, ip_addr->digit4); 		
+    DEBUG(MSG_ERROR, "IP] socket IP %u.%u.%u.%u\n", ip_addr->addr.ipv4.digit[0], ip_addr->addr.ipv4.digit[1], ip_addr->addr.ipv4.digit[2], 
+    ip_addr->addr.ipv4.digit[3]); 		
 	}
 	else{
 	  DEBUG(MSG_ERROR,"IP] socket ioctl error\n");

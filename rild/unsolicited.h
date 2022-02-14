@@ -16,6 +16,9 @@ int urc_clip(char * pResult, int nIndex);
 int urc_ring(char * pResult, int nIndex);
 int urc_no_carrier(char * pResult, int nIndex);
 int urc_dsci(char * pResult, int nIndex);
+int urc_ready(char * pResult, int nIndex);
+int urc_qusim(char * pResult, int nIndex);
+int urc_cmt(char * pResult, int nIndex);
 
 
 #endif

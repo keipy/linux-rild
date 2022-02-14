@@ -16,12 +16,17 @@
 #define MSG2CLIENT_QUE_KEY     4498
 #define MSG2TCPSND_QUE_KEY     4497
 
-#define MAX_NETNAME_LENGTH     20
+#define MAX_MODEL_LENGTH       16
 #define MAX_VERSION_LENGTH     40
-#define MAX_NUMBER_LENGTH      20
-#define MAX_MESSAGE_LENGTH     160
 #define MAX_SERIAL_LENGTH      20
+#define MAX_NETNAME_LENGTH     20
+
+#define MAX_IMSI_LENGTH        20
 #define MAX_ICCID_LENGTH       24
+#define MAX_NUMBER_LENGTH      20
+#define MAX_APN_LENGTH         100
+
+#define MAX_MESSAGE_LENGTH     160
 
 #define MSGQUEUE_NAME       L"Message Queue"
 #define MAX_MSG_QUEUE 20
@@ -33,6 +38,11 @@
 #define UPDATE_SERIALNUMBER 0x2
 #define UPDATE_MODEMVERSION 0x4
 #define UPDATE_NETWORKNAME  0x8
+#define UPDATE_MODEM_MODEL   0x10
+#define UPDATE_SIM_IMSI 0x20
+#define UPDATE_SIM_ICCID 0x40
+#define UPDATE_APN 0x80
+
 
 #define RSSI_INIT_VALUE    (-128)
 #define ECIO_INIT_VALUE    (-31)
@@ -79,7 +89,11 @@ enum
   GPS_START,
   GPS_STOP,
   
-  SYS_CONTROL = 60,
+	APN_SET = 60,
+	BAND_SET,
+	SCAN_SET,
+  
+  SYS_CONTROL = 80,
   PROC_ATTACH,
   PROC_DETACH,
   PROC_UPDATE,
@@ -89,7 +103,7 @@ enum
 enum
 {
   NET_UNKNOWN = 0,
-  NET_WCDMA = 3,
+  NET_WCDMA = 2,
   NET_LTE,
 };
 
@@ -97,20 +111,30 @@ typedef struct {
   long caller;   /* message type, must be > 0 */
   int  msgID;
   int  wparm;
-  int  lparm;
   union {
-    char data[4]; 
+    char data[sizeof(int)]; 
     int  lparm;
   } u;
 }Msg2Agent;
 
 typedef struct
 {
-  char strNetworkName[MAX_NETNAME_LENGTH + 4];        // ATI4
-  char strModemVersion[MAX_VERSION_LENGTH + 4];     // AT+GMR
-  char strPhoneNumber[MAX_NUMBER_LENGTH + 4];      // AT+CNUM
-  char strSerialNumber[MAX_SERIAL_LENGTH + 4];     // AT#MSN
+	char strModelId[MAX_MODEL_LENGTH];
+  char strModemVersion[MAX_VERSION_LENGTH ];     // AT+GMR
+  char strSerialNumber[MAX_SERIAL_LENGTH ];     // AT+GSN
+  char strNetworkName[MAX_NETNAME_LENGTH];        // AT+COPS
+	char strAPN[MAX_APN_LENGTH];			// CGDCONT
 }ModemInfo;
+
+
+
+typedef struct
+{
+	char strIMSI[MAX_IMSI_LENGTH]; // GSN
+  char strICCID[MAX_ICCID_LENGTH];     // AT+ICCID
+  char strPhoneNumber[MAX_NUMBER_LENGTH];      // AT+CNUM
+}UiccInfo;
+
 
 
 typedef struct{
@@ -118,9 +142,10 @@ typedef struct{
   int          agentPID;
   int          agentQue;  // for client -> server
   int          tcpipQue;
-  ModemInfo    modemInfo;
-  char         strICCID[MAX_ICCID_LENGTH];
   char         strAgentVer[MAX_VERSION_LENGTH];
+  ModemInfo    modemInfo;
+	UiccInfo     simInfo;
+  IPAddrT      modemIP;
   int          nRSSI;
   int          nRSRQ;
   int          nRSRP;
@@ -131,10 +156,12 @@ typedef struct{
   int          eSIMState ;
   int          eSMSState ;
   int          eGPSState ;
-  IPAddrT      modemIP;
   int          nRejectCode;
   int          nModemVolume;
   int          nModemMicGain;
+	int          nWCDMABands;
+	int          nLTEBands;
+	int          nNwScanMode;
 } SharedData;
 
 #endif
