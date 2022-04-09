@@ -491,7 +491,7 @@ static void Daemonize(void)
 
 int main(int argc, char *argv[])
 {
-  static char msg_buf[sizeof(Msg2Agent) + sizeof(SmsMsgT)];
+  static char msg_buf[sizeof(Msg2Agent) + MAX_MSGQUE_LENGTH];
 
   int mainLoopRun;
   int pwrDownMode;
@@ -515,7 +515,7 @@ int main(int argc, char *argv[])
   KICK_WATCHDOG;
   mainLoopRun = 1;
   pwrDownMode = SYSTEM_PWR_NONE;
-  msgSize = sizeof(Msg2Agent) + sizeof(SmsMsgT) - sizeof(msg->u.data); 
+  msgSize = sizeof(Msg2Agent) + MAX_MSGQUE_LENGTH - sizeof(msg->u.data); 
   msgSize -= sizeof(msg->caller);
   
   while (mainLoopRun)

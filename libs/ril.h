@@ -39,6 +39,8 @@ typedef unsigned short WORD;
 #define MAX_MESSAGE_LENGTH     160
 #endif
 
+#define MAX_SERVER_URL_LEN     128
+
 #define WM_USER_BROADCAST 0x1000
 
 // ERROR for GetErrorCode()
@@ -238,7 +240,7 @@ typedef struct
 
 typedef struct
 {
-  char addr[256];
+  char addr[MAX_SERVER_URL_LEN];
   WORD port;
 } TcpServerT;
 

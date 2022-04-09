@@ -113,7 +113,7 @@ int GetLastError(void)
 int WriteMsgQueue(int caller_pid, int wparm, void* lpBuffer, int buffSize)
 {
   int rtn, msg_size;
-  char msg_buf[sizeof(Msg2Agent) + sizeof(SmsMsgT)];
+  char msg_buf[sizeof(Msg2Agent) + MAX_MSGQUE_LENGTH];
   Msg2Agent *p_msg = (Msg2Agent *)msg_buf;
 
   if (buffSize > sizeof(p_msg->u.data))
@@ -393,6 +393,11 @@ int TCPOpen(char *addr, WORD port)
     close(s_fifoToClient);
     return WriteMsgQueue(pid, TCP_CLOSE, NULL, 0);
   }
+
+	if (strlen() >= MAX_SERVER_URL_LEN){
+		SetLastError(ERR_INVALID_PARAMETER);
+		return -1;
+	}
 
   sprintf(fifo_name, "/tmp/to_client_%d", pid);
   

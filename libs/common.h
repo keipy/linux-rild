@@ -15,6 +15,7 @@
 #define MSG2SERVER_QUE_KEY     4499
 #define MSG2CLIENT_QUE_KEY     4498
 #define MSG2TCPSND_QUE_KEY     4497
+#define MAX_MSGQUE_LENGTH      512
 
 #define MAX_MODEL_LENGTH       16
 #define MAX_VERSION_LENGTH     40
