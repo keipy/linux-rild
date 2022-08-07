@@ -394,7 +394,7 @@ int TCPOpen(char *addr, WORD port)
     return WriteMsgQueue(pid, TCP_CLOSE, NULL, 0);
   }
 
-	if (strlen() >= MAX_SERVER_URL_LEN){
+	if (strlen(addr) >= MAX_SERVER_URL_LEN){
 		SetLastError(ERR_INVALID_PARAMETER);
 		return -1;
 	}
